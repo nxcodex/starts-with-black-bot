@@ -684,11 +684,11 @@ async function analyzeTerm(term) {
 
   setStatus(`Analyzing "${term}"…`);
 
-  const sys = `You are an expert linguist specializing in African American Vernacular English (AAVE), Black cultural history, and sociolinguistics. You analyze term origins with nuance and cultural respect. You understand:
-- Corpus absence ≠ non-AAVE origin (corpus is limited to 2015-2022, specific contexts)
-- Provenance signals vary by collection: #ThanksgivingClapBack and #BlackGirlMagic (documented Black origin spaces) are stronger signals than #BlackLivesMatter 2020 (which saw massive mainstream adoption)
-- Hip-hop lyrics are a primary AAVE innovation site
-- Many post-2022 AAVE terms have no academic literature yet
+  const sys = `You are a cultural linguist who knows AAVE deeply. Write like a smart, knowledgeable friend — plain English, no academic jargon, no stiff phrasing. Be direct and specific. You know:
+- A term missing from the corpus doesn't mean it's not AAVE — the corpus only covers specific moments from 2015-2022
+- Terms showing up in #ThanksgivingClapBack or #BlackGirlMagic (Black-originated spaces) are stronger signals than #BlackLivesMatter 2020, which went mainstream
+- Hip-hop lyrics are where a lot of AAVE gets coined and spread
+- Many newer AAVE terms have no academic papers yet — that's normal
 Return ONLY valid JSON. No preamble, no markdown.`;
 
   const msg = `Analyze whether "${term}" originates in AAVE.
@@ -702,11 +702,11 @@ ${paperText}
 Return this exact JSON:
 {
   "label": "Likely AAVE" | "Possibly AAVE" | "Unlikely AAVE",
-  "rationale": "2-3 sentences synthesizing all evidence. Be specific.",
-  "description": "What the term means and how it is used.",
-  "origin_context": "Known or probable historical/cultural origin. When and where it emerged.",
-  "corpus_evidence": "What the corpus data tells us, or why its absence isn't conclusive.",
-  "academic_notes": "Key insight from academic sources, or null if none found."
+  "rationale": "2-3 plain-English sentences summing up the evidence. Be specific, not vague. No academic phrasing.",
+  "description": "What the term means and how people actually use it. Keep it real and direct.",
+  "origin_context": "Where this term comes from — who used it first, when, and in what community. Plain English.",
+  "corpus_evidence": "What the corpus data shows in simple terms. If it's not in the corpus, say so plainly and explain why that doesn't settle the question. No jargon — write like you're texting a friend.",
+  "academic_notes": "One plain sentence on what the research says, or null if nothing relevant was found."
 }`;
 
   const raw = await callClaude(sys, msg);
@@ -733,7 +733,7 @@ function renderCard(term, result) {
     }).join('');
     corpusHtml = `<div class="result-section"><div class="section-label">Corpus Evidence</div><div class="corpus-box">${rows}</div></div>`;
   } else if (result.corpus_evidence) {
-    corpusHtml = `<div class="result-section"><div class="section-label">Corpus Note</div><p class="result-text" style="color:var(--muted)">${esc(result.corpus_evidence)}</p></div>`;
+    corpusHtml = `<div class="result-section"><div class="section-label">Corpus Note</div><p class="result-text">${esc(result.corpus_evidence)}</p></div>`;
   }
 
   // Papers section
@@ -752,15 +752,18 @@ function renderCard(term, result) {
     }).join('');
     papersHtml = `<div class="result-section"><div class="section-label">Academic Sources</div>${items}</div>`;
   } else {
-    papersHtml = `<div class="result-section"><div class="section-label">Academic Sources</div><p class="result-text" style="color:var(--muted);font-family:var(--fm);font-size:12px">No papers found for this specific term in Semantic Scholar.</p></div>`;
+    papersHtml = `<div class="result-section"><div class="section-label">Academic Sources</div><p class="result-text" style="font-family:var(--fm);font-size:12px">No papers found for this term in Semantic Scholar.</p></div>`;
   }
 
   card.innerHTML = `
     <div class="card-header">
       <div class="result-term">${esc(term)}</div>
-      <div class="result-label ${lc}">${esc(result.label)}</div>
     </div>
     <div class="card-body">
+      <div class="result-section">
+        <div class="section-label">Probability of AAVE Origin</div>
+        <div class="result-label ${lc}" style="display:inline-block;margin-bottom:4px">${esc(result.label)}</div>
+      </div>
       <div class="result-section">
         <div class="section-label">Analysis</div>
         <p class="result-text">${esc(result.rationale)}</p>
