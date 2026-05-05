@@ -628,15 +628,22 @@ function corpusForPrompt(term) {
 async function searchScholar(term) {
   try {
     const q = encodeURIComponent(`AAVE "${term}" African American Vernacular English`);
-    const r = await fetch(`${S2_URL}?query=${q}&fields=title,abstract,year,authors,externalIds&limit=3`);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000); // 5s timeout
+    const r = await fetch(`${S2_URL}?query=${q}&fields=title,abstract,year,authors,externalIds&limit=3`, {
+      signal: controller.signal
+    });
+    clearTimeout(timeout);
     if (!r.ok) return [];
     const d = await r.json();
     return (d.data || []).filter(p => p.abstract);
-  } catch { return []; }
+  } catch { return []; } // timeout or error → skip gracefully
 }
 
 // ── CLAUDE API ────────────────────────────────────────────────────
 async function callClaude(system, user) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30000); // 30s timeout
   const r = await fetch(CLAUDE_URL, {
     method: 'POST',
     headers: {
@@ -646,7 +653,9 @@ async function callClaude(system, user) {
       'anthropic-dangerous-direct-browser-access': 'true',
     },
     body: JSON.stringify({ model: MODEL, max_tokens: 1000, system, messages: [{ role: 'user', content: user }] }),
+    signal: controller.signal,
   });
+  clearTimeout(timeout);
   if (!r.ok) {
     const e = await r.json().catch(() => ({}));
     throw new Error(e?.error?.message || `API error ${r.status}`);
