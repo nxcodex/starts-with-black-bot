@@ -680,18 +680,8 @@ JSON array only (empty array if none found):`;
 // ── ORIGIN ANALYSIS ───────────────────────────────────────────────
 async function analyzeTerm(term) {
   const corpus = corpusForPrompt(term);
-  setStatus(`Searching academic sources for "${term}"…`);
-  const papers = await searchScholar(term);
-
-  const paperText = papers.length
-    ? papers.map(p => {
-        const authors = (p.authors || []).slice(0,2).map(a => a.name).join(', ');
-        const doi = p.externalIds?.DOI ? `https://doi.org/${p.externalIds.DOI}` : 'N/A';
-        return `Title: ${p.title}\nYear: ${p.year || '?'}\nAuthors: ${authors || '?'}\nDOI: ${doi}\nAbstract: ${(p.abstract || '').slice(0, 400)}`;
-      }).join('\n\n---\n\n')
-    : 'No academic papers found for this specific term.';
-
   setStatus(`Analyzing "${term}"…`);
+  const papers = []; // Scholar disabled — re-enabled via Cloudflare Worker in V2
 
   const sys = `You are a cultural linguist who knows AAVE deeply. Write like a smart, knowledgeable friend — plain English, no academic jargon, no stiff phrasing. Be direct and specific. You know:
 - A term missing from the corpus doesn't mean it's not AAVE — the corpus only covers specific moments from 2015-2022
@@ -705,9 +695,6 @@ Return ONLY valid JSON. No preamble, no markdown.`;
 CORPUS DATA:
 ${corpus}
 
-ACADEMIC SOURCES:
-${paperText}
-
 Return this exact JSON:
 {
   "label": "Likely AAVE" | "Possibly AAVE" | "Unlikely AAVE",
@@ -715,14 +702,44 @@ Return this exact JSON:
   "description": "What the term means and how people actually use it. Keep it real and direct.",
   "origin_context": "Where this term comes from — who used it first, when, and in what community. Plain English.",
   "corpus_evidence": "What the corpus data shows in simple terms. If it's not in the corpus, say so plainly and explain why that doesn't settle the question. No jargon — write like you're texting a friend.",
-  "academic_notes": "One plain sentence on what the research says, or null if nothing relevant was found."
+  "academic_notes": null
 }`;
 
   const raw = await callClaude(sys, msg);
   const clean = raw.replace(/```json|```/g, '').replace(/,(\s*[}\]])/g, '$1').trim();
   const result = JSON.parse(clean);
-  result._papers = papers;
   return result;
+}
+
+// ── FETCH PAPERS (on demand, after card renders) ───────────────────
+async function fetchPapersForCard(term, cardId) {
+  const btn = document.getElementById(`papers-btn-${cardId}`);
+  const area = document.getElementById(`papers-area-${cardId}`);
+  if (!btn || !area) return;
+  btn.disabled = true;
+  btn.textContent = 'Searching…';
+  try {
+    const papers = await searchScholar(term);
+    if (!papers.length) {
+      area.innerHTML = `<p class="result-text" style="font-family:var(--fm);font-size:12px">No papers found for this term in Semantic Scholar.</p>`;
+    } else {
+      area.innerHTML = papers.map(p => {
+        const authors = (p.authors || []).slice(0,2).map(a => a.name).join(', ');
+        const doi = p.externalIds?.DOI;
+        const link = doi ? `<a href="https://doi.org/${doi}" target="_blank" class="source-link">View Paper →</a>` : '';
+        return `<div class="source-item">
+          <div class="source-title">${esc(p.title)}</div>
+          <div class="source-meta">${p.year || '?'}${authors ? ' · ' + esc(authors) : ''}</div>
+          ${link}
+        </div>`;
+      }).join('');
+    }
+    btn.style.display = 'none';
+  } catch(e) {
+    area.innerHTML = `<p class="result-text" style="font-family:var(--fm);font-size:12px;color:#c0392b">Could not reach Semantic Scholar. Try again later.</p>`;
+    btn.disabled = false;
+    btn.textContent = 'Find Academic Papers';
+  }
 }
 
 // ── RENDER RESULT ─────────────────────────────────────────────────
@@ -745,24 +762,13 @@ function renderCard(term, result) {
     corpusHtml = `<div class="result-section"><div class="section-label">Corpus Note</div><p class="result-text">${esc(result.corpus_evidence)}</p></div>`;
   }
 
-  // Papers section
-  let papersHtml = '';
-  if (result._papers && result._papers.length) {
-    const items = result._papers.map(p => {
-      const authors = (p.authors || []).slice(0,2).map(a => a.name).join(', ');
-      const doi = p.externalIds?.DOI;
-      const link = doi ? `<a href="https://doi.org/${doi}" target="_blank" class="source-link">View Paper →</a>` : '';
-      return `<div class="source-item">
-        <div class="source-title">${esc(p.title)}</div>
-        <div class="source-meta">${p.year || '?'}${authors ? ' · ' + esc(authors) : ''}</div>
-        ${result.academic_notes ? `<p class="source-insight">${esc(result.academic_notes)}</p>` : ''}
-        ${link}
-      </div>`;
-    }).join('');
-    papersHtml = `<div class="result-section"><div class="section-label">Academic Sources</div>${items}</div>`;
-  } else {
-    papersHtml = `<div class="result-section"><div class="section-label">Academic Sources</div><p class="result-text" style="font-family:var(--fm);font-size:12px">No papers found for this term in Semantic Scholar.</p></div>`;
-  }
+  // Papers section — on demand
+  const cardId = term.replace(/[^a-z0-9]/gi, '_');
+  const papersHtml = `<div class="result-section">
+    <div class="section-label">Academic Sources</div>
+    <div id="papers-area-${cardId}"></div>
+    <button id="papers-btn-${cardId}" class="btn-ghost" style="margin-top:8px;font-size:10px;padding:8px 14px" onclick="fetchPapersForCard('${esc(term)}', '${cardId}')">Find Academic Papers</button>
+  </div>`;
 
   card.innerHTML = `
     <div class="card-header">
