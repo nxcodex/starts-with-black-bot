@@ -558,7 +558,7 @@ body {
 //  STARTS WITH BLACK BOT
 // ═══════════════════════════════════════════════════════════════════
 
-const MODEL      = 'claude-sonnet-4-20250514';
+const MODEL      = 'claude-3-5-haiku-20241022';
 const CLAUDE_URL = 'https://api.anthropic.com/v1/messages';
 const S2_URL     = 'https://api.semanticscholar.org/graph/v1/paper/search';
 
@@ -643,6 +643,7 @@ async function callClaude(system, user) {
       'Content-Type': 'application/json',
       'x-api-key': apiKey,
       'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
     },
     body: JSON.stringify({ model: MODEL, max_tokens: 1000, system, messages: [{ role: 'user', content: user }] }),
   });
