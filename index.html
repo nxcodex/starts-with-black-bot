@@ -624,6 +624,29 @@ function corpusForPrompt(term) {
   return `"${term}" found ${d.total} times across:\n${lines.join('\n')}\n\nProvenance note: Appearances in origin-specific Black cultural spaces (#ThanksgivingClapBack, #BlackGirlMagic, #BlackTwitter) are stronger AAVE signals than appearances in mainstream-adopted movements.`;
 }
 
+// ── WIKIPEDIA VERIFICATION ───────────────────────────────────────
+async function checkWikipedia(term) {
+  try {
+    const q = encodeURIComponent(term);
+    const url = `https://en.wikipedia.org/api/rest_v1/page/summary/${q}`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    const r = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeout);
+    if (!r.ok) return null;
+    const d = await r.json();
+    if (d.type === 'disambiguation' || d.type === 'no-extract') return null;
+    // Only return if it's actually about the cultural/linguistic meaning
+    const extract = d.extract || '';
+    const relevant = ['slang', 'AAVE', 'African American', 'hip-hop', 'vernacular',
+      'phrase', 'expression', 'term', 'word', 'culture', 'music', 'song'].some(
+      kw => extract.toLowerCase().includes(kw)
+    );
+    if (!relevant) return null;
+    return { summary: extract.slice(0, 200), url: d.content_urls?.desktop?.page || null };
+  } catch { return null; }
+}
+
 // ── SEMANTIC SCHOLAR ──────────────────────────────────────────────
 async function searchScholar(term) {
   try {
@@ -683,11 +706,14 @@ async function analyzeTerm(term) {
   setStatus(`Analyzing "${term}"…`);
   const papers = []; // Scholar disabled — re-enabled via Cloudflare Worker in V2
 
-  const sys = `You are a cultural linguist who knows AAVE deeply. Write like a smart, knowledgeable friend — plain English, no academic jargon, no stiff phrasing. Be direct and specific. You know:
-- A term missing from the corpus doesn't mean it's not AAVE — the corpus only covers specific moments from 2015-2022
-- Terms showing up in #ThanksgivingClapBack or #BlackGirlMagic (Black-originated spaces) are stronger signals than #BlackLivesMatter 2020, which went mainstream
-- Hip-hop lyrics are where a lot of AAVE gets coined and spread
-- Many newer AAVE terms have no academic papers yet — that's normal
+  // Wikipedia runs in parallel with Claude — doesn't block analysis
+  const wikiPromise = checkWikipedia(term);
+
+  const sys = `You are a cultural linguist who knows AAVE, Black culture, and hip-hop deeply. Write like a sharp, knowledgeable friend — plain English, no jargon, no filler. Be specific to THIS term. Name real songs, artists, moments, years, communities. If you know exactly where something came from, say it. Do not generalize when you have real knowledge. You know:
+- Corpus absence just means the term postdates 2022 or was outside those specific hashtag collections — it does not settle origin
+- #ThanksgivingClapBack and #BlackGirlMagic are stronger AAVE signals than #BlackLivesMatter 2020 which went mainstream
+- Hip-hop is a primary site of AAVE innovation — specific track and artist references matter
+- Many newer AAVE terms have no academic papers — use your cultural knowledge instead
 Return ONLY valid JSON. No preamble, no markdown.`;
 
   const msg = `Analyze whether "${term}" originates in AAVE.
@@ -697,17 +723,21 @@ ${corpus}
 
 Return this exact JSON:
 {
-  "label": "Likely AAVE" | "Possibly AAVE" | "Unlikely AAVE",
-  "rationale": "2-3 plain-English sentences summing up the evidence. Be specific, not vague. No academic phrasing.",
-  "description": "What the term means and how people actually use it. Keep it real and direct.",
-  "origin_context": "Where this term comes from — who used it first, when, and in what community. Plain English.",
-  "corpus_evidence": "What the corpus data shows in simple terms. If it's not in the corpus, say so plainly and explain why that doesn't settle the question. No jargon — write like you're texting a friend.",
+  "label": "Likely Black Origin" | "Probably Black Origin" | "Unlikely Black Origin",
+  "rationale": "2-3 sentences making the case. Be specific to this term — name the community, era, or usage pattern. No vague hedging.",
+  "description": "What this term actually means and how people use it. Specific to this term, not generic.",
+  "origin_context": "The real origin story — name the artist, song, region, subculture, or moment if you know it. Give a year. Do not generalize.",
+  "cultural_examples": "2-3 specific real-world examples — an actual song and artist, a cultural moment, a community it spread through. Name names and years.",
+  "confidence": "High" | "Medium" | "Low",
+  "confidence_note": "One sentence only if confidence is Medium or Low — what specifically you're uncertain about. Null if High.",
+  "corpus_evidence": "One sentence only. If found, name the collections. If not found, say: this term likely emerged after 2022 or outside the communities this corpus captured.",
   "academic_notes": null
 }`;
 
   const raw = await callClaude(sys, msg);
   const clean = raw.replace(/```json|```/g, '').replace(/,(\s*[}\]])/g, '$1').trim();
   const result = JSON.parse(clean);
+  result._wiki = await wikiPromise; // attach wiki result (may be null)
   return result;
 }
 
@@ -747,7 +777,7 @@ function renderCard(term, result) {
   const card = document.getElementById(safeId(term));
   if (!card) return;
 
-  const lc = { 'Likely AAVE': 'label-likely', 'Possibly AAVE': 'label-possibly', 'Unlikely AAVE': 'label-unlikely' }[result.label] || 'label-unlikely';
+  const lc = { 'Likely Black Origin': 'label-likely', 'Probably Black Origin': 'label-possibly', 'Unlikely Black Origin': 'label-unlikely' }[result.label] || 'label-unlikely';
 
   // Corpus section
   const cd = lookupTerm(term);
@@ -759,7 +789,7 @@ function renderCard(term, result) {
     }).join('');
     corpusHtml = `<div class="result-section"><div class="section-label">Corpus Evidence</div><div class="corpus-box">${rows}</div></div>`;
   } else if (result.corpus_evidence) {
-    corpusHtml = `<div class="result-section"><div class="section-label">Corpus Note</div><p class="result-text">${esc(result.corpus_evidence)}</p></div>`;
+    corpusHtml = `<div class="result-section"><div class="section-label">Corpus</div><p class="result-text" style="font-size:13px;color:var(--muted)">${esc(result.corpus_evidence)}</p></div>`;
   }
 
   // Papers section — on demand
@@ -791,6 +821,26 @@ function renderCard(term, result) {
         <div class="section-label">Origin</div>
         <p class="result-text">${esc(result.origin_context)}</p>
       </div>
+      ${result.cultural_examples ? `
+      <div class="result-section">
+        <div class="section-label">In the Culture</div>
+        <p class="result-text">${esc(result.cultural_examples)}</p>
+      </div>` : ''}
+      ${result.cultural_examples ? `
+      <div class="result-section">
+        <div class="section-label">In the Culture</div>
+        <p class="result-text">${esc(result.cultural_examples)}</p>
+        ${result.confidence === 'Medium' || result.confidence === 'Low' ? `
+        <p style="margin-top:10px;font-family:var(--fm);font-size:11px;color:var(--accent);letter-spacing:0.06em">
+          ⚠ ${esc(result.confidence)} confidence${result.confidence_note ? ' — ' + esc(result.confidence_note) : ''}
+        </p>` : ''}
+      </div>` : ''}
+      ${result._wiki ? `
+      <div class="result-section">
+        <div class="section-label">Wikipedia</div>
+        <p class="result-text" style="font-size:14px">${esc(result._wiki.summary)}${result._wiki.summary.length >= 200 ? '…' : ''}</p>
+        ${result._wiki.url ? `<a href="${result._wiki.url}" target="_blank" class="source-link" style="display:inline-block;margin-top:8px">Read on Wikipedia →</a>` : ''}
+      </div>` : ''}
       ${corpusHtml}
       ${papersHtml}
     </div>`;
