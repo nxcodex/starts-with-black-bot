@@ -761,7 +761,7 @@ Return this exact JSON:
 
 
 // ── RENDER RESULT ─────────────────────────────────────────────────
-function renderCard(term, result) {
+async function renderCard(term, result) {
   const card = document.getElementById(safeId(term));
   if (!card) return;
 
@@ -791,16 +791,38 @@ function renderCard(term, result) {
   }
   const geniusHtml = ''; // no separate section — link lives inside culture section
 
-  // Papers section
+  // Papers section — with pull quotes extracted by Claude
   let papersHtml = '';
   if (result._papers && result._papers.length) {
-    const items = result._papers.map(p => {
+    // Extract pull quotes from abstracts in parallel
+    const withQuotes = await Promise.all(result._papers.map(async p => {
+      let quote = null;
+      if (p.abstract) {
+        try {
+          const raw = await callClaude(
+            'You extract relevant sentences from academic abstracts. Return ONLY a JSON object, no markdown.',
+            `Does this abstract contain a direct reference to the term "${term}" or its cultural/linguistic origin? If yes, extract the single most relevant sentence as a pull quote. If no, return null for quote.
+
+Abstract: ${p.abstract.slice(0, 500)}
+
+Return: {"quote": "exact sentence here" | null}`
+          );
+          const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim());
+          quote = parsed.quote || null;
+        } catch { quote = null; }
+      }
+      return { ...p, quote };
+    }));
+
+    const items = withQuotes.map(p => {
       const authors = (p.authors || []).slice(0,2).map(a => a.name).join(', ');
       const doi = p.externalIds?.DOI;
       const link = doi ? `<a href="https://doi.org/${doi}" target="_blank" class="source-link">View Paper →</a>` : '';
+      const quoteHtml = p.quote ? `<p style="margin:8px 0;font-size:13px;color:var(--muted);border-left:2px solid var(--accent);padding-left:10px;line-height:1.6">${esc(p.quote)}</p>` : '';
       return `<div class="source-item">
         <div class="source-title">${esc(p.title)}</div>
         <div class="source-meta">${p.year || '?'}${authors ? ' · ' + esc(authors) : ''}</div>
+        ${quoteHtml}
         ${link}
       </div>`;
     }).join('');
@@ -830,11 +852,6 @@ function renderCard(term, result) {
         <div class="section-label">Origin</div>
         <p class="result-text">${esc(result.origin_context)}</p>
       </div>
-      ${result.cultural_examples ? `
-      <div class="result-section">
-        <div class="section-label">In the Culture</div>
-        <p class="result-text">${esc(result.cultural_examples)}</p>
-      </div>` : ''}
       ${result.cultural_examples ? `
       <div class="result-section">
         <div class="section-label">In the Culture</div>
@@ -874,7 +891,7 @@ async function runAnalysis(terms) {
   for (const term of terms) {
     try {
       const result = await analyzeTerm(term);
-      renderCard(term, result);
+      await renderCard(term, result);
     } catch (e) {
       const card = document.getElementById(safeId(term));
       if (card) card.innerHTML = `<div class="card-body"><p style="color:#c0392b;font-size:13px">Error: ${esc(e.message)}</p></div>`;
