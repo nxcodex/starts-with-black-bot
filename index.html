@@ -562,6 +562,29 @@ const MODEL      = 'claude-haiku-4-5-20251001';
 const CLAUDE_URL = 'https://api.anthropic.com/v1/messages';
 const WORKER_URL = 'https://swbb-proxy.nmazzucco.workers.dev';
 
+// ── CACHE ─────────────────────────────────────────────────────────
+function cacheKey(term) {
+  return term.toLowerCase().trim().replace(/s+/g, '_');
+}
+
+async function cacheGet(term) {
+  try {
+    const r = await fetch(`${WORKER_URL}/cache/get?key=${encodeURIComponent(cacheKey(term))}`);
+    const data = await r.json();
+    if (data) data._cached = true;
+    return data || null;
+  } catch { return null; }
+}
+
+async function cacheSet(term, result) {
+  try {
+    await fetch(`${WORKER_URL}/cache/set?key=${encodeURIComponent(cacheKey(term))}`, {
+      method: 'POST',
+      body: JSON.stringify(result),
+    });
+  } catch { /* non-blocking — cache failure doesn't break analysis */ }
+}
+
 let apiKey    = localStorage.getItem('swbb_key') || '';
 let reference = null;
 let mode      = 'term';
@@ -650,10 +673,9 @@ async function checkWikipedia(term) {
 // ── SEMANTIC SCHOLAR ──────────────────────────────────────────────
 async function searchScholar(term) {
   try {
-    const q = encodeURIComponent(`AAVE "${term}" African American Vernacular English`);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 8000);
-    const r = await fetch(`${WORKER_URL}/scholar?q=${q}`, { signal: controller.signal });
+    const r = await fetch(`${WORKER_URL}/scholar?term=${encodeURIComponent(term)}`, { signal: controller.signal });
     clearTimeout(timeout);
     if (!r.ok) return [];
     return await r.json();
@@ -715,6 +737,14 @@ JSON array only (empty array if none found):`;
 
 // ── ORIGIN ANALYSIS ───────────────────────────────────────────────
 async function analyzeTerm(term) {
+  // Check cache first — if found, return immediately without any API calls
+  setStatus(`Checking cache for "${term}"…`);
+  const cached = await cacheGet(term);
+  if (cached) {
+    setStatus('');
+    return cached;
+  }
+
   const corpus = corpusForPrompt(term);
   setStatus(`Analyzing "${term}"…`);
   const scholarPromise = searchScholar(term);
@@ -754,8 +784,11 @@ Return this exact JSON:
   const result = JSON.parse(clean);
   result._wiki   = await wikiPromise;
   result._papers = await scholarPromise;
-  // Use the song Claude named, not a generic term search
   result._genius = result.genius_query ? await searchGenius(result.genius_query) : [];
+
+  // Cache the complete result — non-blocking
+  cacheSet(term, result);
+
   return result;
 }
 
@@ -834,6 +867,7 @@ Return: {"quote": "exact sentence here" | null}`
   card.innerHTML = `
     <div class="card-header">
       <div class="result-term">${esc(term)}</div>
+      ${result._cached ? '<div style="font-family:var(--fm);font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-top:4px">Verified result</div>' : ''}
     </div>
     <div class="card-body">
       <div class="result-section">
