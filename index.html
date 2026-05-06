@@ -744,7 +744,7 @@ async function fetchPapersForCard(term, cardId) {
 
 // ── RENDER RESULT ─────────────────────────────────────────────────
 function renderCard(term, result) {
-  const card = document.getElementById(`card-${CSS.escape(term)}`);
+  const card = document.getElementById(safeId(term));
   if (!card) return;
 
   const lc = { 'Likely AAVE': 'label-likely', 'Possibly AAVE': 'label-possibly', 'Unlikely AAVE': 'label-unlikely' }[result.label] || 'label-unlikely';
@@ -805,7 +805,7 @@ async function runAnalysis(terms) {
   terms.forEach(term => {
     const card = document.createElement('div');
     card.className = 'result-card';
-    card.id = `card-${term}`;
+    card.id = safeId(term);
     card.innerHTML = `<div class="card-loading"><div class="ld"><span></span><span></span><span></span></div><span>Analyzing "<strong>${esc(term)}</strong>"…</span></div>`;
     area.appendChild(card);
   });
@@ -815,7 +815,7 @@ async function runAnalysis(terms) {
       const result = await analyzeTerm(term);
       renderCard(term, result);
     } catch (e) {
-      const card = document.getElementById(`card-${CSS.escape(term)}`);
+      const card = document.getElementById(safeId(term));
       if (card) card.innerHTML = `<div class="card-body"><p style="color:#c0392b;font-size:13px">Error: ${esc(e.message)}</p></div>`;
     }
   }
@@ -825,6 +825,9 @@ async function runAnalysis(terms) {
 // ── HELPERS ───────────────────────────────────────────────────────
 function esc(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function safeId(term) {
+  return 'card-' + term.toLowerCase().replace(/[^a-z0-9]/g, '_');
 }
 function setStatus(msg) { document.getElementById('status-bar').textContent = msg; }
 function toast(msg, dur = 2800) {
