@@ -560,7 +560,7 @@ body {
 
 const MODEL      = 'claude-haiku-4-5-20251001';
 const CLAUDE_URL = 'https://api.anthropic.com/v1/messages';
-const S2_URL     = 'https://api.semanticscholar.org/graph/v1/paper/search';
+const WORKER_URL = 'https://swbb-proxy.nmazzucco.workers.dev';
 
 let apiKey    = localStorage.getItem('swbb_key') || '';
 let reference = null;
@@ -652,15 +652,25 @@ async function searchScholar(term) {
   try {
     const q = encodeURIComponent(`AAVE "${term}" African American Vernacular English`);
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000); // 5s timeout
-    const r = await fetch(`${S2_URL}?query=${q}&fields=title,abstract,year,authors,externalIds&limit=3`, {
-      signal: controller.signal
-    });
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    const r = await fetch(`${WORKER_URL}/scholar?q=${q}`, { signal: controller.signal });
     clearTimeout(timeout);
     if (!r.ok) return [];
-    const d = await r.json();
-    return (d.data || []).filter(p => p.abstract);
-  } catch { return []; } // timeout or error → skip gracefully
+    return await r.json();
+  } catch { return []; }
+}
+
+// ── GENIUS ────────────────────────────────────────────────────────
+async function searchGenius(term) {
+  try {
+    const q = encodeURIComponent(term);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    const r = await fetch(`${WORKER_URL}/genius?q=${q}`, { signal: controller.signal });
+    clearTimeout(timeout);
+    if (!r.ok) return [];
+    return await r.json();
+  } catch { return []; }
 }
 
 // ── CLAUDE API ────────────────────────────────────────────────────
@@ -704,10 +714,11 @@ JSON array only (empty array if none found):`;
 async function analyzeTerm(term) {
   const corpus = corpusForPrompt(term);
   setStatus(`Analyzing "${term}"…`);
-  const papers = []; // Scholar disabled — re-enabled via Cloudflare Worker in V2
+  const scholarPromise = searchScholar(term);
 
-  // Wikipedia runs in parallel with Claude — doesn't block analysis
-  const wikiPromise = checkWikipedia(term);
+  // All verification runs in parallel with Claude — nothing blocks analysis
+  const wikiPromise    = checkWikipedia(term);
+  const geniusPromise  = searchGenius(term);
 
   const sys = `You are a cultural linguist who knows AAVE, Black culture, and hip-hop deeply. Write like a sharp, knowledgeable friend — plain English, no jargon, no filler. Be specific to THIS term. Name real songs, artists, moments, years, communities. If you know exactly where something came from, say it. Do not generalize when you have real knowledge. You know:
 - Corpus absence just means the term postdates 2022 or was outside those specific hashtag collections — it does not settle origin
@@ -737,40 +748,12 @@ Return this exact JSON:
   const raw = await callClaude(sys, msg);
   const clean = raw.replace(/```json|```/g, '').replace(/,(\s*[}\]])/g, '$1').trim();
   const result = JSON.parse(clean);
-  result._wiki = await wikiPromise; // attach wiki result (may be null)
+  result._wiki   = await wikiPromise;
+  result._genius = await geniusPromise;
+  result._papers = await scholarPromise;
   return result;
 }
 
-// ── FETCH PAPERS (on demand, after card renders) ───────────────────
-async function fetchPapersForCard(term, cardId) {
-  const btn = document.getElementById(`papers-btn-${cardId}`);
-  const area = document.getElementById(`papers-area-${cardId}`);
-  if (!btn || !area) return;
-  btn.disabled = true;
-  btn.textContent = 'Searching…';
-  try {
-    const papers = await searchScholar(term);
-    if (!papers.length) {
-      area.innerHTML = `<p class="result-text" style="font-family:var(--fm);font-size:12px">No papers found for this term in Semantic Scholar.</p>`;
-    } else {
-      area.innerHTML = papers.map(p => {
-        const authors = (p.authors || []).slice(0,2).map(a => a.name).join(', ');
-        const doi = p.externalIds?.DOI;
-        const link = doi ? `<a href="https://doi.org/${doi}" target="_blank" class="source-link">View Paper →</a>` : '';
-        return `<div class="source-item">
-          <div class="source-title">${esc(p.title)}</div>
-          <div class="source-meta">${p.year || '?'}${authors ? ' · ' + esc(authors) : ''}</div>
-          ${link}
-        </div>`;
-      }).join('');
-    }
-    btn.style.display = 'none';
-  } catch(e) {
-    area.innerHTML = `<p class="result-text" style="font-family:var(--fm);font-size:12px;color:#c0392b">Could not reach Semantic Scholar. Try again later.</p>`;
-    btn.disabled = false;
-    btn.textContent = 'Find Academic Papers';
-  }
-}
 
 // ── RENDER RESULT ─────────────────────────────────────────────────
 function renderCard(term, result) {
@@ -792,13 +775,37 @@ function renderCard(term, result) {
     corpusHtml = `<div class="result-section"><div class="section-label">Corpus</div><p class="result-text" style="font-size:13px;color:var(--muted)">${esc(result.corpus_evidence)}</p></div>`;
   }
 
-  // Papers section — on demand
-  const cardId = term.replace(/[^a-z0-9]/gi, '_');
-  const papersHtml = `<div class="result-section">
-    <div class="section-label">Academic Sources</div>
-    <div id="papers-area-${cardId}"></div>
-    <button id="papers-btn-${cardId}" class="btn-ghost" style="margin-top:8px;font-size:10px;padding:8px 14px" onclick="fetchPapersForCard('${esc(term)}', '${cardId}')">Find Academic Papers</button>
-  </div>`;
+  // Genius section
+  let geniusHtml = '';
+  if (result._genius && result._genius.length) {
+    const items = result._genius.map(g => {
+      const yr = g.year ? ` · ${g.year}` : '';
+      return `<div class="source-item">
+        <div class="source-title">${esc(g.title)}</div>
+        <div class="source-meta">${esc(g.artist)}${yr}</div>
+        <a href="${esc(g.url)}" target="_blank" class="source-link">View on Genius →</a>
+      </div>`;
+    }).join('');
+    geniusHtml = `<div class="result-section"><div class="section-label">Found in Music</div>${items}</div>`;
+  }
+
+  // Papers section
+  let papersHtml = '';
+  if (result._papers && result._papers.length) {
+    const items = result._papers.map(p => {
+      const authors = (p.authors || []).slice(0,2).map(a => a.name).join(', ');
+      const doi = p.externalIds?.DOI;
+      const link = doi ? `<a href="https://doi.org/${doi}" target="_blank" class="source-link">View Paper →</a>` : '';
+      return `<div class="source-item">
+        <div class="source-title">${esc(p.title)}</div>
+        <div class="source-meta">${p.year || '?'}${authors ? ' · ' + esc(authors) : ''}</div>
+        ${link}
+      </div>`;
+    }).join('');
+    papersHtml = `<div class="result-section"><div class="section-label">Academic Sources</div>${items}</div>`;
+  } else {
+    papersHtml = `<div class="result-section"><div class="section-label">Academic Sources</div><p class="result-text" style="font-family:var(--fm);font-size:12px">No papers found for this term in Semantic Scholar.</p></div>`;
+  }
 
   card.innerHTML = `
     <div class="card-header">
@@ -842,6 +849,7 @@ function renderCard(term, result) {
         ${result._wiki.url ? `<a href="${result._wiki.url}" target="_blank" class="source-link" style="display:inline-block;margin-top:8px">Read on Wikipedia →</a>` : ''}
       </div>` : ''}
       ${corpusHtml}
+      ${geniusHtml}
       ${papersHtml}
     </div>`;
 }
