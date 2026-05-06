@@ -661,15 +661,18 @@ async function searchScholar(term) {
 }
 
 // ── GENIUS ────────────────────────────────────────────────────────
-async function searchGenius(term) {
+async function searchGenius(query) {
+  if (!query) return [];
   try {
-    const q = encodeURIComponent(term);
+    const q = encodeURIComponent(query);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 8000);
     const r = await fetch(`${WORKER_URL}/genius?q=${q}`, { signal: controller.signal });
     clearTimeout(timeout);
     if (!r.ok) return [];
-    return await r.json();
+    const results = await r.json();
+    // Return only the top result — Claude named a specific song
+    return results.slice(0, 1);
   } catch { return []; }
 }
 
@@ -718,7 +721,7 @@ async function analyzeTerm(term) {
 
   // All verification runs in parallel with Claude — nothing blocks analysis
   const wikiPromise    = checkWikipedia(term);
-  const geniusPromise  = searchGenius(term);
+  const geniusQuery    = null; // populated after Claude responds — see below
 
   const sys = `You are a cultural linguist who knows AAVE, Black culture, and hip-hop deeply. Write like a sharp, knowledgeable friend — plain English, no jargon, no filler. Be specific to THIS term. Name real songs, artists, moments, years, communities. If you know exactly where something came from, say it. Do not generalize when you have real knowledge. You know:
 - Corpus absence just means the term postdates 2022 or was outside those specific hashtag collections — it does not settle origin
@@ -738,7 +741,8 @@ Return this exact JSON:
   "rationale": "2-3 sentences making the case. Be specific to this term — name the community, era, or usage pattern. No vague hedging.",
   "description": "What this term actually means and how people use it. Specific to this term, not generic.",
   "origin_context": "The real origin story — name the artist, song, region, subculture, or moment if you know it. Give a year. Do not generalize.",
-  "cultural_examples": "2-3 specific real-world examples — an actual song and artist, a cultural moment, a community it spread through. Name names and years.",
+  "cultural_examples": "2-3 specific real-world examples of cultural spread. Name real moments, communities, and years.",
+  "genius_query": "The single most culturally significant song that documents this term's spread — format exactly as: SONG TITLE ARTIST NAME. Example: Formation Beyonce. Null if you cannot name one with confidence.",
   "confidence": "High" | "Medium" | "Low",
   "confidence_note": "One sentence only if confidence is Medium or Low — what specifically you're uncertain about. Null if High.",
   "corpus_evidence": "One sentence only. If found, name the collections. If not found, say: this term likely emerged after 2022 or outside the communities this corpus captured.",
@@ -749,8 +753,9 @@ Return this exact JSON:
   const clean = raw.replace(/```json|```/g, '').replace(/,(\s*[}\]])/g, '$1').trim();
   const result = JSON.parse(clean);
   result._wiki   = await wikiPromise;
-  result._genius = await geniusPromise;
   result._papers = await scholarPromise;
+  // Use the song Claude named, not a generic term search
+  result._genius = result.genius_query ? await searchGenius(result.genius_query) : [];
   return result;
 }
 
@@ -775,19 +780,16 @@ function renderCard(term, result) {
     corpusHtml = `<div class="result-section"><div class="section-label">Corpus</div><p class="result-text" style="font-size:13px;color:var(--muted)">${esc(result.corpus_evidence)}</p></div>`;
   }
 
-  // Genius section
-  let geniusHtml = '';
+  // Genius — single verified song link, shown inline under cultural examples
+  let geniusLink = '';
   if (result._genius && result._genius.length) {
-    const items = result._genius.map(g => {
-      const yr = g.year ? ` · ${g.year}` : '';
-      return `<div class="source-item">
-        <div class="source-title">${esc(g.title)}</div>
-        <div class="source-meta">${esc(g.artist)}${yr}</div>
-        <a href="${esc(g.url)}" target="_blank" class="source-link">View on Genius →</a>
-      </div>`;
-    }).join('');
-    geniusHtml = `<div class="result-section"><div class="section-label">Found in Music</div>${items}</div>`;
+    const g = result._genius[0];
+    const yr = g.year ? ` (${g.year})` : '';
+    geniusLink = `<a href="${esc(g.url)}" target="_blank" class="source-link" style="display:inline-block;margin-top:10px">
+      Verified on Genius: ${esc(g.title)}${yr} →
+    </a>`;
   }
+  const geniusHtml = ''; // no separate section — link lives inside culture section
 
   // Papers section
   let papersHtml = '';
@@ -841,6 +843,7 @@ function renderCard(term, result) {
         <p style="margin-top:10px;font-family:var(--fm);font-size:11px;color:var(--accent);letter-spacing:0.06em">
           ⚠ ${esc(result.confidence)} confidence${result.confidence_note ? ' — ' + esc(result.confidence_note) : ''}
         </p>` : ''}
+        ${geniusLink}
       </div>` : ''}
       ${result._wiki ? `
       <div class="result-section">
