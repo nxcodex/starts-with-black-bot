@@ -405,6 +405,46 @@ body {
   border-radius: 50%;
 }
 
+/* ── SUBCULTURE TAGS ─────────────────────────────────────────────── */
+.subculture-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+.subculture-tag {
+  font-family: var(--fm);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #90B4D8;
+  background: rgba(30,58,95,0.4);
+  border: 1px solid rgba(42,80,128,0.5);
+  border-radius: 2px;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+
+/* ── MAINSTREAM STATUS ───────────────────────────────────────────── */
+.mainstream-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--fm);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 2px;
+  margin-bottom: 12px;
+}
+.ms-hidden     { background: rgba(26,107,107,0.2); color: #A8DEDE; border: 1px solid rgba(42,138,138,0.3); }
+.ms-crossing   { background: rgba(200,146,42,0.15); color: var(--accent); border: 1px solid rgba(200,146,42,0.3); }
+.ms-mainstream { background: rgba(74,37,53,0.3); color: #C49AAA; border: 1px solid rgba(106,48,69,0.4); }
+.ms-reclaimed  { background: rgba(30,58,95,0.3); color: #90B4D8; border: 1px solid rgba(42,80,128,0.4); }
+.ms-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+
 /* ── IN MUSIC ────────────────────────────────────────────────────── */
 .music-card {
   display: flex;
@@ -886,6 +926,7 @@ async function analyzeTerm(term) {
 - Hip-hop is a primary site of AAVE innovation — specific track and artist references matter
 - Many newer AAVE terms have no academic papers — use your cultural knowledge instead
 - LABEL CRITERIA: Use "Likely Black Origin" when you can identify the specific Black community of origin — ballroom, Southern hip-hop, Bay Area, Black Twitter, etc. The METHOD of spread does NOT affect the label. Use "Probably Black Origin" when origin suggests Black culture but is not fully conclusive. Use "Unlikely Black Origin" when the term originated in a subculture but cannot be determined as specifically Black. Use "Unknown Origin" when evidence is genuinely inconclusive and origin cannot be determined — not the same as Unlikely.
+- MAINSTREAM STATUS: "Still Hidden" = term is still primarily within origin community, not widely adopted outside. "Crossing Over" = term is spreading beyond origin community into broader culture, mainstream adoption beginning. "Gone Mainstream" = term has been fully adopted by mainstream culture, often stripped of original context. "Reclaimed" = term was mainstream but has been pulled back, redefined, or recontextualized by the origin community.
 - CONFIDENCE: High = origin community is identifiable even if spread was informal. Medium = origin community is unclear or contested. Low = little evidence either way. A canonical song is NOT required for High confidence.
 Return ONLY valid JSON. No preamble, no markdown.`;
 
@@ -911,6 +952,9 @@ Return this exact JSON:
   "cultural_examples": ["specific example 1 — real moment, community, year", "specific example 2 — real moment, community, year", "specific example 3 — real moment, community, year"],
   "genius_query": "Most culturally significant song documenting this term — format: SONG TITLE ARTIST NAME. Example: Formation Beyonce. Null if unsure.",
   "common_variations": ["genuine linguistic variants only — different spellings or morphological forms of the SAME term. Empty array if none."],
+  "subculture_tags": ["specific subcultures this term is rooted in or spread through, e.g. ballroom, Black queer, Southern hip-hop, Black Twitter, HBCU, drill, crunk. Be specific. Max 5 tags. Empty array if none clearly apply."],
+  "mainstream_status": "Still Hidden" | "Crossing Over" | "Gone Mainstream" | "Reclaimed",
+  "mainstream_note": "One sentence explaining the current status of this term — who is using it now and where it sits culturally.",
   "spider": {"music": 0, "social_media": 0, "regional": 0, "community": 0, "mainstream": 0, "academic": 0},
   "confidence": "High" | "Medium" | "Low",
   "confidence_note": "Confidence = certainty of Black/AAVE origin ONLY. High = origin community identifiable. Medium = origin unclear or contested. Low = little evidence. Canonical song NOT required for High. One sentence if Medium or Low. Null if High.",
@@ -1073,7 +1117,19 @@ async function renderCard(term, result) {
       ${Array.isArray(result.cultural_examples) && result.cultural_examples.length ? `
       <div class="result-section">
         <div class="section-label">In the Culture</div>
+        ${result.mainstream_status ? `
+        <div>
+          <div class="${'ms-' + result.mainstream_status.toLowerCase().replace(/\s+/g, '').replace('gonemainstream','mainstream').replace('stillhidden','hidden').replace('crossingover','crossing')} mainstream-badge">
+            <div class="ms-dot"></div>
+            ${esc(result.mainstream_status)}
+          </div>
+          ${result.mainstream_note ? `<p style="font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:14px">${esc(result.mainstream_note)}</p>` : ''}
+        </div>` : ''}
         <ul class="culture-list">${result.cultural_examples.map(ex => `<li>${esc(ex)}</li>`).join('')}</ul>
+        ${result.subculture_tags && result.subculture_tags.length ? `
+        <div class="subculture-tags">
+          ${result.subculture_tags.map(tag => `<div class="subculture-tag">${esc(tag)}</div>`).join('')}
+        </div>` : ''}
         ${spiderHtml}
       </div>` : ''}
       ${musicHtml}
