@@ -1045,7 +1045,8 @@ async function analyzeTerm(term) {
 - MAINSTREAM STATUS: "Still Hidden" = term is still primarily within origin community, not widely adopted outside. "Crossing Over" = term is spreading beyond origin community into broader culture, mainstream adoption beginning. "Gone Mainstream" = term has been fully adopted by mainstream culture, often stripped of original context. "Reclaimed" = term was mainstream but has been pulled back, redefined, or recontextualized by the origin community.
 - CONFIDENCE: High = origin community is identifiable even if spread was informal. Medium = origin community is unclear or contested. Low = little evidence either way. A canonical song is NOT required for High confidence.
 - TIMELINE: Provide 4-8 dated milestones tracing this term from origin to present. Each milestone should be a specific, real, dateable event — a song release, a viral moment, a TV appearance, a brand adoption, a community shift. Order chronologically. Be specific with years.
-Return ONLY valid JSON. No preamble, no markdown.`;
+Return ONLY valid JSON. No preamble, no markdown.
+CRITICAL JSON RULES: Never use double quotes inside string values — rephrase instead. Never use backslashes. Keep all text plain and clean.`;
 
   const msg = `Analyze whether "${term}" originates in AAVE.
 
@@ -1084,6 +1085,40 @@ Return this exact JSON:
 }`;
 
   const raw = await callClaude(sys, msg);
+  function repairJSON(str) {
+    // Character-by-character repair of unescaped double quotes inside string values
+    let result = '';
+    let inString = false;
+    let escaped = false;
+    for (let i = 0; i < str.length; i++) {
+      const c = str[i];
+      if (escaped) { result += c; escaped = false; continue; }
+      if (c === '\\') { result += c; escaped = true; continue; }
+      if (c === '"') {
+        if (!inString) {
+          inString = true;
+          result += c;
+        } else {
+          // Look ahead past whitespace to see what follows
+          let j = i + 1;
+          while (j < str.length && (str[j] === ' ' || str[j] === '\t')) j++;
+          const next = str[j];
+          // If followed by JSON structural chars, this quote closes the string
+          if (next === ':' || next === ',' || next === '}' || next === ']' || j >= str.length) {
+            inString = false;
+            result += c;
+          } else {
+            // Unescaped quote inside string value — escape it
+            result += '\\"';
+          }
+        }
+        continue;
+      }
+      result += c;
+    }
+    return result;
+  }
+
   function cleanJSON(str) {
     // Strip markdown fences
     str = str.replace(/```json|```/g, '').trim();
@@ -1097,21 +1132,27 @@ Return this exact JSON:
   }
   const clean = cleanJSON(raw);
   let result;
-  try {
-    result = JSON.parse(clean);
-  } catch(parseErr) {
-    // Try a more aggressive clean — replace unescaped newlines inside strings
-    // Try a more aggressive clean — strip control characters
-    const aggressiveClean = clean
-      .replace(/\n/g, ' ')
-      .replace(/\r/g, '')
-      .replace(/\t/g, ' ')
-      .replace(/[\u0001-\u001F\u007F-\u009F]/g, ' ');
-    try {
-      result = JSON.parse(aggressiveClean);
-    } catch(e2) {
-      // Third attempt: strip arrays most likely to contain special chars
-      // Strip problematic arrays using bracket-counting parser
+
+  // Parse chain: 4 attempts, each more aggressive
+  const parseAttempts = [
+    // 1. Standard clean
+    () => JSON.parse(clean),
+
+    // 2. Strip control characters
+    () => {
+      const s = clean
+        .replace(/\n/g, ' ').replace(/\r/g, '').replace(/\t/g, ' ')
+        .replace(/[\u0001-\u001F\u007F-\u009F]/g, ' ');
+      return JSON.parse(s);
+    },
+
+    // 3. Repair unescaped double quotes inside string values
+    () => JSON.parse(repairJSON(clean
+      .replace(/\n/g, ' ').replace(/\r/g, '').replace(/\t/g, ' ')
+      .replace(/[\u0001-\u001F\u007F-\u009F]/g, ' '))),
+
+    // 4. Strip arrays most likely to contain bad chars, then repair
+    () => {
       function removeArrayField(str, field) {
         const marker = '"' + field + '"';
         const idx = str.indexOf(marker);
@@ -1126,14 +1167,24 @@ Return this exact JSON:
         }
         return str.slice(0, idx) + '"' + field + '": []' + str.slice(i + 1);
       }
-      let stripped = aggressiveClean;
-      stripped = removeArrayField(stripped, 'timeline');
-      stripped = removeArrayField(stripped, 'cultural_examples');
-      stripped = removeArrayField(stripped, 'common_variations');
-      stripped = removeArrayField(stripped, 'subculture_tags');
-      result = JSON.parse(stripped);
-    }
+      let s = clean
+        .replace(/\n/g, ' ').replace(/\r/g, '').replace(/\t/g, ' ')
+        .replace(/[\u0001-\u001F\u007F-\u009F]/g, ' ');
+      s = removeArrayField(s, 'timeline');
+      s = removeArrayField(s, 'cultural_examples');
+      s = removeArrayField(s, 'common_variations');
+      s = removeArrayField(s, 'subculture_tags');
+      return JSON.parse(repairJSON(s));
+    },
+  ];
+
+  for (const attempt of parseAttempts) {
+    try { result = attempt(); break; }
+    catch(e) { /* try next */ }
   }
+
+  if (!result) throw new Error('Could not parse Claude response as JSON after 4 attempts');
+
   result._wiki   = await wikiPromise;
   result._genius = result.genius_query ? await searchGenius(result.genius_query) : [];
 
