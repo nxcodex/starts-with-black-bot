@@ -344,6 +344,135 @@ body {
 .corpus-coll { color: var(--accent); }
 .corpus-count { color: var(--text); }
 
+/* ── CONFIDENCE BOX ──────────────────────────────────────────────── */
+.confidence-box {
+  border-left: 3px solid var(--accent);
+  background: var(--accent-d);
+  border-radius: 0 var(--r) var(--r) 0;
+  padding: 12px 16px;
+  margin-bottom: 20px;
+}
+.confidence-box-label {
+  font-family: var(--fm);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+.confidence-box-level {
+  font-family: var(--fm);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.confidence-box-note {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+/* ── SPIDER CHART ────────────────────────────────────────────────── */
+.spider-wrap {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+.spider-labels {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  width: 100%;
+  max-width: 320px;
+}
+.spider-label-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--fm);
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 0.06em;
+}
+.spider-label-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+.spider-label-score {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* ── CULTURE BULLETS ─────────────────────────────────────────────── */
+.culture-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.culture-list li {
+  font-size: 14px;
+  color: var(--text);
+  line-height: 1.7;
+  padding: 8px 0 8px 16px;
+  border-bottom: 1px solid var(--border);
+  position: relative;
+}
+.culture-list li:last-child { border-bottom: none; }
+.culture-list li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 17px;
+  width: 5px;
+  height: 5px;
+  background: var(--accent);
+  border-radius: 50%;
+}
+
+/* ── IN MUSIC ────────────────────────────────────────────────────── */
+.music-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 14px 16px;
+  text-decoration: none;
+  transition: border-color 0.2s;
+  margin-top: 4px;
+}
+.music-card:hover { border-color: var(--accent); }
+.music-icon {
+  font-size: 22px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.music-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  line-height: 1.3;
+  margin-bottom: 2px;
+}
+.music-meta {
+  font-family: var(--fm);
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
+.music-arrow {
+  margin-left: auto;
+  color: var(--accent);
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
 /* ── SOURCE ITEMS ────────────────────────────────────────────────── */
 .source-item { border-top: 1px solid var(--border); padding-top: 12px; margin-top: 12px; }
 .source-item:first-child { border-top: none; padding-top: 0; margin-top: 0; }
@@ -785,6 +914,8 @@ async function analyzeTerm(term) {
 - #ThanksgivingClapBack and #BlackGirlMagic are stronger AAVE signals than #BlackLivesMatter 2020 which went mainstream
 - Hip-hop is a primary site of AAVE innovation — specific track and artist references matter
 - Many newer AAVE terms have no academic papers — use your cultural knowledge instead
+- LABEL CRITERIA: Use "Likely Black Origin" when you can identify the specific Black community of origin — ballroom, Southern hip-hop, Bay Area, Black Twitter, etc. The METHOD of spread (social media vs song vs oral) does NOT affect the label. Only use "Probably" when the community of origin is genuinely unclear. Only use "Unlikely" when evidence points away from Black origin.
+- CONFIDENCE: High = origin community is identifiable even if spread was informal. Medium = origin community is unclear or contested. Low = little evidence either way. A canonical song is NOT required for High confidence.
 Return ONLY valid JSON. No preamble, no markdown.`;
 
   const msg = `Analyze whether "${term}" originates in AAVE.
@@ -792,18 +923,27 @@ Return ONLY valid JSON. No preamble, no markdown.`;
 CORPUS DATA:
 ${corpus}
 
+Spider chart scores (0-10 each):
+- music: how central was music to spreading this term?
+- social_media: how central was social media / internet culture?
+- regional: how geographically specific is the origin (10=very specific region, 0=nationwide from the start)?
+- community: how tied to a specific subculture (10=very specific community like ballroom, 0=general Black culture)?
+- mainstream: how far has it traveled outside the origin community (10=fully mainstream, 0=still niche)?
+- academic: how much academic documentation exists (10=well studied, 0=none)?
+
 Return this exact JSON:
 {
   "label": "Likely Black Origin" | "Probably Black Origin" | "Unlikely Black Origin",
-  "rationale": "2-3 sentences making the case. Be specific to this term — name the community, era, or usage pattern. No vague hedging.",
-  "description": "What this term actually means and how people use it. Specific to this term, not generic.",
-  "origin_context": "The real origin story — name the artist, song, region, subculture, or moment if you know it. Give a year. Do not generalize.",
-  "cultural_examples": "2-3 specific real-world examples of cultural spread. Name real moments, communities, and years.",
-  "genius_query": "The single most culturally significant song that documents this term's spread — format exactly as: SONG TITLE ARTIST NAME. Example: Formation Beyonce. Null if you cannot name one with confidence.",
-  "common_variations": ["list only genuine linguistic variants — different spellings or morphological forms of the SAME term, e.g. swag surfin\', swag surfing. Do NOT include synonyms or related terms. Return empty array [] if no meaningful variants exist — do not force variants that don't make cultural sense."],
+  "rationale": "2-3 sentences making the case. Be specific — name the community, era, usage pattern. No vague hedging.",
+  "description": "What this term means and how people use it. Specific to this term.",
+  "origin_context": "The real origin story — name the artist, song, region, subculture, or moment. Give a year. Do not generalize.",
+  "cultural_examples": ["specific example 1 — real moment, community, year", "specific example 2 — real moment, community, year", "specific example 3 — real moment, community, year"],
+  "genius_query": "Most culturally significant song documenting this term — format: SONG TITLE ARTIST NAME. Example: Formation Beyonce. Null if unsure.",
+  "common_variations": ["genuine linguistic variants only — different spellings or morphological forms of the SAME term. Empty array if none."],
+  "spider": {"music": 0, "social_media": 0, "regional": 0, "community": 0, "mainstream": 0, "academic": 0},
   "confidence": "High" | "Medium" | "Low",
-  "confidence_note": "IMPORTANT: confidence is ONLY about certainty of Black/AAVE cultural origin — NOT about whether a canonical song exists or corpus results. If origin is clearly rooted in a specific Black community, use High. One sentence only if Medium or Low explaining what about the ORIGIN is uncertain. Null if High.",
-  "corpus_evidence": "One sentence only. If found, name the collections. If not found, say: this term likely emerged after 2022 or outside the communities this corpus captured.",
+  "confidence_note": "Confidence = certainty of Black/AAVE origin ONLY. High = origin community identifiable. Medium = origin unclear or contested. Low = little evidence. Canonical song NOT required for High. One sentence if Medium or Low. Null if High.",
+  "corpus_evidence": "One sentence. If found, name collections. If not: this term likely emerged after 2022 or outside the communities this corpus captured.",
   "academic_notes": null
 }`;
 
@@ -813,33 +953,11 @@ Return this exact JSON:
   result._wiki   = await wikiPromise;
   result._genius = result.genius_query ? await searchGenius(result.genius_query) : [];
 
-  // If Claude identified common variations, expand corpus and re-prompt if richer data found
-  if (result.common_variations && result.common_variations.length) {
-    const variantCorpusParts = result.common_variations
-      .map(v => corpusForPrompt(v))
-      .filter(Boolean);
-    if (variantCorpusParts.length) {
-      // Append variant corpus data to what Claude already has — no second Claude call needed
-      // The common_variations are stored and used for display
-    }
-  }
-
-  // Extract pull quotes from paper abstracts before caching
+  // Extract papers — no pull quote extraction, show abstract excerpt honestly
   const rawPapers = await scholarPromise;
-  result._papers = await Promise.all(rawPapers.map(async p => {
-    if (!p.abstract) return { ...p, quote: null };
-    try {
-      const raw = await callClaude(
-        'You extract relevant sentences from academic abstracts. Return ONLY valid JSON, no markdown.',
-        `Does this abstract contain a direct reference to the term "${root}" (or variants: ${variants.slice(0,3).join(', ')}) or its cultural origin? Extract the single most relevant sentence as a pull quote. If nothing directly relevant, return null.
-
-Abstract: ${p.abstract.slice(0, 500)}
-
-Return: {"quote": "exact sentence" | null}`
-      );
-      const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim());
-      return { ...p, quote: parsed.quote || null };
-    } catch { return { ...p, quote: null }; }
+  result._papers = rawPapers.map(p => ({
+    ...p,
+    abstract_excerpt: p.abstract ? p.abstract.slice(0, 200) : null,
   }));
 
   // Cache the complete result under root form — non-blocking
@@ -869,16 +987,7 @@ async function renderCard(term, result) {
     corpusHtml = `<div class="result-section"><div class="section-label">Corpus</div><p class="result-text" style="font-size:13px;color:var(--muted)">${esc(result.corpus_evidence)}</p></div>`;
   }
 
-  // Genius — single verified song link, shown inline under cultural examples
-  let geniusLink = '';
-  if (result._genius && result._genius.length) {
-    const g = result._genius[0];
-    const yr = g.year ? ` (${g.year})` : '';
-    geniusLink = `<a href="${esc(g.url)}" target="_blank" class="source-link" style="display:inline-block;margin-top:10px">
-      Verified on Genius: ${esc(g.title)}${yr} →
-    </a>`;
-  }
-  const geniusHtml = ''; // no separate section — link lives inside culture section
+  // Genius handled via musicHtml block built in card render
 
   // Papers — quotes pre-extracted in analyzeTerm, stored in cache
   let papersHtml = '';
@@ -900,6 +1009,62 @@ async function renderCard(term, result) {
     papersHtml = `<div class="result-section"><div class="section-label">Academic Sources</div><p class="result-text" style="font-family:var(--fm);font-size:12px">No papers found for this term in Semantic Scholar.</p></div>`;
   }
 
+  // Build spider chart SVG
+  let spiderHtml = '';
+  if (result.spider) {
+    const s = result.spider;
+    const dims = [
+      { key: 'music',        label: 'Music'        },
+      { key: 'social_media', label: 'Social Media' },
+      { key: 'regional',     label: 'Regional'     },
+      { key: 'community',    label: 'Community'    },
+      { key: 'mainstream',   label: 'Mainstream'   },
+      { key: 'academic',     label: 'Academic'     },
+    ];
+    const cx = 110, cy = 110, r = 80, n = dims.length;
+    const angle = (i) => (Math.PI * 2 * i / n) - Math.PI / 2;
+    const pt = (i, val) => {
+      const a = angle(i), mag = (val / 10) * r;
+      return { x: cx + mag * Math.cos(a), y: cy + mag * Math.sin(a) };
+    };
+    let gridLines = '';
+    [0.25, 0.5, 0.75, 1].forEach(frac => {
+      const pts = dims.map((_, i) => {
+        const a = angle(i), mag = frac * r;
+        return `${(cx + mag * Math.cos(a)).toFixed(1)},${(cy + mag * Math.sin(a)).toFixed(1)}`;
+      }).join(' ');
+      gridLines += `<polygon points="${pts}" fill="none" stroke="#2a2a2a" stroke-width="1"/>`;
+    });
+    const axes = dims.map((_, i) => {
+      const a = angle(i);
+      return `<line x1="${cx}" y1="${cy}" x2="${(cx + r * Math.cos(a)).toFixed(1)}" y2="${(cy + r * Math.sin(a)).toFixed(1)}" stroke="#2a2a2a" stroke-width="1"/>`;
+    }).join('');
+    const dataPts = dims.map((d, i) => {
+      const val = Math.max(0, Math.min(10, s[d.key] || 0));
+      const p = pt(i, val);
+      return `${p.x.toFixed(1)},${p.y.toFixed(1)}`;
+    }).join(' ');
+    const labelEls = dims.map((d, i) => {
+      const a = angle(i), lx = cx + (r + 20) * Math.cos(a), ly = cy + (r + 20) * Math.sin(a);
+      const anchor = lx < cx - 5 ? 'end' : lx > cx + 5 ? 'start' : 'middle';
+      return `<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="${anchor}" dominant-baseline="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#8A7A68" letter-spacing="0.06em">${d.label.toUpperCase()}</text>`;
+    }).join('');
+    const dots = dims.map((d, i) => {
+      const p = pt(i, Math.max(0, Math.min(10, s[d.key] || 0)));
+      return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="#C8922A"/>`;
+    }).join('');
+    const scoreItems = dims.map(d => `<div class="spider-label-item"><div class="spider-label-dot"></div><span>${d.label} <span class="spider-label-score">${s[d.key] || 0}</span></span></div>`).join('');
+    spiderHtml = `<div class="spider-wrap"><svg viewBox="0 0 220 220" width="220" height="220" style="overflow:visible">${gridLines}${axes}<polygon points="${dataPts}" fill="rgba(200,146,42,0.15)" stroke="#C8922A" stroke-width="1.5"/>${dots}${labelEls}</svg><div class="spider-labels">${scoreItems}</div></div>`;
+  }
+
+  // Build In Music block
+  let musicHtml = '';
+  if (result._genius && result._genius.length) {
+    const g = result._genius[0];
+    const yr = g.year ? ` · ${g.year}` : '';
+    musicHtml = `<div class="result-section"><div class="section-label">In Music</div><a href="${esc(g.url)}" target="_blank" class="music-card"><div class="music-icon">🎵</div><div><div class="music-title">${esc(g.title)}</div><div class="music-meta">${esc(g.artist)}${yr} · Genius</div></div><div class="music-arrow">→</div></a></div>`;
+  }
+
   card.innerHTML = `
     <div class="card-header">
       <div class="result-term">${esc(term)}</div>
@@ -908,7 +1073,8 @@ async function renderCard(term, result) {
     <div class="card-body">
       <div class="result-section">
         <div class="section-label">Probability of AAVE Origin</div>
-        <div class="result-label ${lc}" style="display:inline-block;margin-bottom:4px">${esc(result.label)}</div>
+        <div class="result-label ${lc}" style="display:inline-block;margin-bottom:12px">${esc(result.label)}</div>
+        ${result.confidence ? `<div class="confidence-box"><div class="confidence-box-label">Confidence</div><div class="confidence-box-level">${esc(result.confidence)}</div>${result.confidence_note ? `<div class="confidence-box-note">${esc(result.confidence_note)}</div>` : ''}</div>` : ''}
       </div>
       <div class="result-section">
         <div class="section-label">Analysis</div>
@@ -924,30 +1090,17 @@ async function renderCard(term, result) {
       </div>
       <div class="result-section">
         <div class="section-label">Common Variations</div>
-        <p class="result-text" style="font-family:var(--fm);font-size:13px">
-          ${result.common_variations && result.common_variations.length
-            ? result.common_variations.map(v => esc(v)).join(' · ')
-            : 'None identified'}
-        </p>
+        <p class="result-text" style="font-family:var(--fm);font-size:13px">${result.common_variations && result.common_variations.length ? result.common_variations.map(v => esc(v)).join(' · ') : 'None identified'}</p>
       </div>
-      ${result.cultural_examples ? `
+      ${Array.isArray(result.cultural_examples) && result.cultural_examples.length ? `
       <div class="result-section">
         <div class="section-label">In the Culture</div>
-        <p class="result-text">${esc(result.cultural_examples)}</p>
-        ${result.confidence === 'Medium' || result.confidence === 'Low' ? `
-        <p style="margin-top:10px;font-family:var(--fm);font-size:11px;color:var(--accent);letter-spacing:0.06em">
-          ⚠ ${esc(result.confidence)} confidence${result.confidence_note ? ' — ' + esc(result.confidence_note) : ''}
-        </p>` : ''}
-        ${geniusLink}
+        <ul class="culture-list">${result.cultural_examples.map(ex => `<li>${esc(ex)}</li>`).join('')}</ul>
+        ${spiderHtml}
       </div>` : ''}
-      ${result._wiki ? `
-      <div class="result-section">
-        <div class="section-label">Wikipedia</div>
-        <p class="result-text" style="font-size:14px">${esc(result._wiki.summary)}${result._wiki.summary.length >= 200 ? '…' : ''}</p>
-        ${result._wiki.url ? `<a href="${result._wiki.url}" target="_blank" class="source-link" style="display:inline-block;margin-top:8px">Read on Wikipedia →</a>` : ''}
-      </div>` : ''}
+      ${musicHtml}
+      ${result._wiki ? `<div class="result-section"><div class="section-label">Wikipedia</div><p class="result-text" style="font-size:14px">${esc(result._wiki.summary)}${result._wiki.summary.length >= 200 ? '…' : ''}</p>${result._wiki.url ? `<a href="${result._wiki.url}" target="_blank" class="source-link" style="display:inline-block;margin-top:8px">Read on Wikipedia →</a>` : ''}</div>` : ''}
       ${corpusHtml}
-      ${geniusHtml}
       ${papersHtml}
     </div>`;
 }
