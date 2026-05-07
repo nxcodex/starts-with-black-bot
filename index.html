@@ -1036,52 +1036,58 @@ async function analyzeTerm(term) {
   const trendsPromise  = fetchTrends(root);
   const geniusQuery    = null; // populated after Claude responds — see below
 
-  const sys = `You are a cultural linguist who knows AAVE, Black culture, and hip-hop deeply. Write like a sharp, knowledgeable friend — plain English, no jargon, no filler. Be specific to THIS term. Name real songs, artists, moments, years, communities. If you know exactly where something came from, say it. Do not generalize when you have real knowledge. You know:
-- Corpus absence just means the term postdates 2022 or was outside those specific hashtag collections — it does not settle origin
-- #ThanksgivingClapBack and #BlackGirlMagic are stronger AAVE signals than #BlackLivesMatter 2020 which went mainstream
-- Hip-hop is a primary site of AAVE innovation — specific track and artist references matter
-- Many newer AAVE terms have no academic papers — use your cultural knowledge instead
-- LABEL CRITERIA: Use "Likely Black Origin" when you can identify the specific Black community of origin — ballroom, Southern hip-hop, Bay Area, Black Twitter, etc. The METHOD of spread does NOT affect the label. Use "Probably Black Origin" when origin suggests Black culture but is not fully conclusive. Use "Unlikely Black Origin" when the term originated in a subculture but cannot be determined as specifically Black. Use "Unknown Origin" when evidence is genuinely inconclusive and origin cannot be determined — not the same as Unlikely.
-- MAINSTREAM STATUS: "Still Hidden" = term is still primarily within origin community, not widely adopted outside. "Crossing Over" = term is spreading beyond origin community into broader culture, mainstream adoption beginning. "Gone Mainstream" = term has been fully adopted by mainstream culture, often stripped of original context. "Reclaimed" = term was mainstream but has been pulled back, redefined, or recontextualized by the origin community.
-- CONFIDENCE: High = origin community is identifiable even if spread was informal. Medium = origin community is unclear or contested. Low = little evidence either way. A canonical song is NOT required for High confidence.
-- TIMELINE: Provide 4-8 dated milestones tracing this term from origin to present. Each milestone should be a specific, real, dateable event — a song release, a viral moment, a TV appearance, a brand adoption, a community shift. Order chronologically. Be specific with years.
-Return ONLY valid JSON. No preamble, no markdown.
-CRITICAL JSON RULES: Never use double quotes inside string values — rephrase instead. Never use backslashes. Keep all text plain and clean.`;
+  const sys = `You are a cultural linguist specializing in AAVE, Black culture, and hip-hop. Write like a sharp, knowledgeable friend. Be specific — name real artists, songs, years, communities. Do not generalize when you have real knowledge.
+
+LABEL RULES:
+- "Likely Black Origin" = identifiable Black community of origin (ballroom, Southern hip-hop, Bay Area, Black Twitter, etc.)
+- "Probably Black Origin" = suggests Black origin but not fully conclusive
+- "Unlikely Black Origin" = originated in a subculture but cannot be determined as specifically Black
+- "Unknown Origin" = genuinely inconclusive, no clear community
+
+CONFIDENCE RULES (about origin certainty ONLY — not corpus or song evidence):
+- High = origin community identifiable
+- Medium = origin unclear or contested
+- Low = little evidence either way
+
+MAINSTREAM STATUS:
+- "Still Hidden" = primarily within origin community
+- "Crossing Over" = spreading beyond origin community
+- "Gone Mainstream" = fully absorbed by mainstream culture
+
+Return your response using EXACTLY this format with these labels — no JSON, no markdown, no extra formatting:
+
+LABEL: [one of the four labels above]
+CONFIDENCE: [High, Medium, or Low]
+RATIONALE: [2-3 sentences. Specific evidence, named communities, no vague hedging]
+DESCRIPTION: [What the term means and how people use it. Specific, not generic]
+ORIGIN: [Real origin story — artist, song, region, subculture, moment, year. Do not generalize]
+MAINSTREAM_STATUS: [one of the three statuses above]
+GENIUS_QUERY: [Most culturally significant song — format: SONG TITLE ARTIST NAME. Example: Formation Beyonce. Write null if unsure]
+COMMON_VARIATIONS: [comma-separated genuine variants, or "none"]
+SUBCULTURE_TAGS: [comma-separated specific subcultures, max 5, or "none"]
+SPIDER_MUSIC: [0-10]
+SPIDER_SOCIAL: [0-10]
+SPIDER_REGIONAL: [0-10]
+SPIDER_COMMUNITY: [0-10]
+SPIDER_MAINSTREAM: [0-10]
+SPIDER_ACADEMIC: [0-10]
+CORPUS_EVIDENCE: [One sentence — name collections if found, or state it likely postdates 2022]
+CULTURAL_EXAMPLES:
+- [Specific example 1 — real moment, community, year]
+- [Specific example 2 — real moment, community, year]
+- [Specific example 3 — real moment, community, year]
+TIMELINE:
+[YEAR]: [Specific milestone for this term]
+[YEAR]: [Specific milestone]
+[YEAR]: [Specific milestone]
+[Add more as needed, 4-8 total]`;
 
   const msg = `Analyze whether "${term}" originates in AAVE.
 
 CORPUS DATA:
 ${corpus}
 
-Spider chart scores (0-10 each):
-- music: how central was music to spreading this term?
-- social_media: how central was social media / internet culture?
-- regional: how geographically specific is the origin (10=very specific region, 0=nationwide from the start)?
-- community: how tied to a specific subculture (10=very specific community like ballroom, 0=general Black culture)?
-- mainstream: how far has it traveled outside the origin community (10=fully mainstream, 0=still niche)?
-- academic: how much academic documentation exists (10=well studied, 0=none)?
-
-Return this exact JSON:
-{
-  "label": "Likely Black Origin" | "Probably Black Origin" | "Unlikely Black Origin" | "Unknown Origin",
-  "rationale": "2-3 sentences making the case. Be specific — name the community, era, usage pattern. No vague hedging.",
-  "description": "What this term means and how people use it. Specific to this term.",
-  "origin_context": "The real origin story — name the artist, song, region, subculture, or moment. Give a year. Do not generalize.",
-  "cultural_examples": ["specific example 1 — real moment, community, year", "specific example 2 — real moment, community, year", "specific example 3 — real moment, community, year"],
-  "genius_query": "Most culturally significant song documenting this term — format: SONG TITLE ARTIST NAME. Example: Formation Beyonce. Null if unsure.",
-  "common_variations": ["genuine linguistic variants only — different spellings or morphological forms of the SAME term. Empty array if none."],
-  "subculture_tags": ["specific subcultures this term is rooted in or spread through, e.g. ballroom, Black queer, Southern hip-hop, Black Twitter, HBCU, drill, crunk. Be specific. Max 5 tags. Empty array if none clearly apply."],
-  "mainstream_status": "Still Hidden" | "Crossing Over" | "Gone Mainstream" | "Reclaimed",
-  "spider": {"music": 0, "social_media": 0, "regional": 0, "community": 0, "mainstream": 0, "academic": 0},
-  "confidence": "High" | "Medium" | "Low",
-  "confidence_note": "Confidence = certainty of Black/AAVE origin ONLY. High = origin community identifiable. Medium = origin unclear or contested. Low = little evidence. Canonical song NOT required for High. One sentence if Medium or Low. Null if High.",
-  "corpus_evidence": "One sentence. If found, name collections. If not: this term likely emerged after 2022 or outside the communities this corpus captured.",
-  "timeline": [
-    {"year": 1990, "event": "Brief description of what happened this year with this term"},
-    {"year": 2010, "event": "Another milestone"}
-  ],
-  "academic_notes": null
-}`;
+Use the exact format specified. No JSON. No markdown. No extra text.`;
 
   const raw = await callClaude(sys, msg);
   function repairJSON(str) {
@@ -1129,65 +1135,63 @@ Return this exact JSON:
     if (start !== -1 && end !== -1) str = str.slice(start, end + 1);
     return str;
   }
-  const clean = cleanJSON(raw);
-  let result;
+  // Parse structured text response — no JSON, no escaping issues
+  function parseStructured(text) {
+    const r = {};
+    const lines = text.split('\n');
+    let mode = null;
+    let buffer = [];
 
-  // Parse chain: 4 attempts, each more aggressive
-  const parseAttempts = [
-    // 1. Standard clean
-    () => JSON.parse(clean),
-
-    // 2. Strip control characters
-    () => {
-      const s = clean
-        .replace(/\n/g, ' ').replace(/\r/g, '').replace(/\t/g, ' ')
-        .replace(/[\u0001-\u001F\u007F-\u009F]/g, ' ');
-      return JSON.parse(s);
-    },
-
-    // 3. Repair unescaped double quotes inside string values
-    () => JSON.parse(repairJSON(clean
-      .replace(/\n/g, ' ').replace(/\r/g, '').replace(/\t/g, ' ')
-      .replace(/[\u0001-\u001F\u007F-\u009F]/g, ' '))),
-
-    // 4. Strip arrays most likely to contain bad chars, then repair
-    () => {
-      function removeArrayField(str, field) {
-        const marker = '"' + field + '"';
-        const idx = str.indexOf(marker);
-        if (idx === -1) return str;
-        const arrStart = str.indexOf('[', idx + marker.length);
-        if (arrStart === -1) return str;
-        let depth = 0, i = arrStart;
-        while (i < str.length) {
-          if (str[i] === '[') depth++;
-          if (str[i] === ']') { depth--; if (depth === 0) break; }
-          i++;
-        }
-        return str.slice(0, idx) + '"' + field + '": []' + str.slice(i + 1);
+    function flush() {
+      if (mode === 'CULTURAL_EXAMPLES') {
+        r.cultural_examples = buffer.filter(l => l.trim().startsWith('-')).map(l => l.replace(/^\s*-\s*/, '').trim());
+      } else if (mode === 'TIMELINE') {
+        r.timeline = buffer
+          .filter(l => /^\d{4}:/.test(l.trim()))
+          .map(l => { const m = l.trim().match(/^(\d{4}):\s*(.+)$/); return m ? {year: parseInt(m[1]), event: m[2].trim()} : null; })
+          .filter(Boolean);
       }
-      let s = clean
-        .replace(/\n/g, ' ').replace(/\r/g, '').replace(/\t/g, ' ')
-        .replace(/[\u0001-\u001F\u007F-\u009F]/g, ' ');
-      s = removeArrayField(s, 'timeline');
-      s = removeArrayField(s, 'cultural_examples');
-      s = removeArrayField(s, 'common_variations');
-      s = removeArrayField(s, 'subculture_tags');
-      return JSON.parse(repairJSON(s));
-    },
-  ];
+      buffer = [];
+      mode = null;
+    }
 
-  for (const attempt of parseAttempts) {
-    try { result = attempt(); break; }
-    catch(e) { /* try next */ }
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+
+      if (trimmed === 'CULTURAL_EXAMPLES:') { flush(); mode = 'CULTURAL_EXAMPLES'; continue; }
+      if (trimmed === 'TIMELINE:') { flush(); mode = 'TIMELINE'; continue; }
+
+      if (mode) { buffer.push(trimmed); continue; }
+
+      const colonIdx = trimmed.indexOf(':');
+      if (colonIdx === -1) continue;
+      const key = trimmed.slice(0, colonIdx).trim();
+      const val = trimmed.slice(colonIdx + 1).trim();
+
+      if (key === 'LABEL')             r.label = val;
+      else if (key === 'CONFIDENCE')   r.confidence = val;
+      else if (key === 'RATIONALE')    r.rationale = val;
+      else if (key === 'DESCRIPTION')  r.description = val;
+      else if (key === 'ORIGIN')       r.origin_context = val;
+      else if (key === 'MAINSTREAM_STATUS') r.mainstream_status = val;
+      else if (key === 'GENIUS_QUERY') r.genius_query = val === 'null' ? null : val;
+      else if (key === 'COMMON_VARIATIONS') r.common_variations = val === 'none' ? [] : val.split(',').map(s => s.trim()).filter(Boolean);
+      else if (key === 'SUBCULTURE_TAGS')   r.subculture_tags   = val === 'none' ? [] : val.split(',').map(s => s.trim()).filter(Boolean);
+      else if (key === 'SPIDER_MUSIC')     { if (!r.spider) r.spider = {}; r.spider.music        = parseInt(val) || 0; }
+      else if (key === 'SPIDER_SOCIAL')    { if (!r.spider) r.spider = {}; r.spider.social_media = parseInt(val) || 0; }
+      else if (key === 'SPIDER_REGIONAL')  { if (!r.spider) r.spider = {}; r.spider.regional     = parseInt(val) || 0; }
+      else if (key === 'SPIDER_COMMUNITY') { if (!r.spider) r.spider = {}; r.spider.community    = parseInt(val) || 0; }
+      else if (key === 'SPIDER_MAINSTREAM'){ if (!r.spider) r.spider = {}; r.spider.mainstream   = parseInt(val) || 0; }
+      else if (key === 'SPIDER_ACADEMIC')  { if (!r.spider) r.spider = {}; r.spider.academic     = parseInt(val) || 0; }
+      else if (key === 'CORPUS_EVIDENCE')  r.corpus_evidence = val;
+    }
+    flush();
+    return r;
   }
 
-  if (!result) {
-    // Show the cleaned string around the failure point
-    const c = clean.replace(/\n/g, ' ').replace(/[\u0001-\u001F]/g, ' ');
-    const failPos = Math.min(2500, c.length);
-    throw new Error('JSON parse failed — check Claude response format');
-  }
+  const result = parseStructured(raw);
+  if (!result.label) throw new Error('Could not parse response — missing label field');
 
   result._wiki   = await wikiPromise;
   result._genius = result.genius_query ? await searchGenius(result.genius_query) : [];
