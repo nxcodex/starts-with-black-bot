@@ -1107,7 +1107,17 @@ Return this exact JSON:
       .replace(/\r/g, '')
       .replace(/\t/g, ' ')
       .replace(/[\u0001-\u001F\u007F-\u009F]/g, ' ');
-    result = JSON.parse(aggressiveClean);
+    try {
+      result = JSON.parse(aggressiveClean);
+    } catch(e2) {
+      // Third attempt: strip arrays most likely to contain special chars
+      const stripped = aggressiveClean
+        .replace(/"timeline"\s*:\s*\[[^\]]*\]/g, '"timeline": []')
+        .replace(/"cultural_examples"\s*:\s*\[[^\]]*\]/g, '"cultural_examples": []')
+        .replace(/"common_variations"\s*:\s*\[[^\]]*\]/g, '"common_variations": []')
+        .replace(/"subculture_tags"\s*:\s*\[[^\]]*\]/g, '"subculture_tags": []');
+      result = JSON.parse(stripped);
+    }
   }
   result._wiki   = await wikiPromise;
   result._genius = result.genius_query ? await searchGenius(result.genius_query) : [];
