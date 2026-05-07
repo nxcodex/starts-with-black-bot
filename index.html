@@ -1072,7 +1072,6 @@ Return this exact JSON:
   "common_variations": ["genuine linguistic variants only — different spellings or morphological forms of the SAME term. Empty array if none."],
   "subculture_tags": ["specific subcultures this term is rooted in or spread through, e.g. ballroom, Black queer, Southern hip-hop, Black Twitter, HBCU, drill, crunk. Be specific. Max 5 tags. Empty array if none clearly apply."],
   "mainstream_status": "Still Hidden" | "Crossing Over" | "Gone Mainstream" | "Reclaimed",
-  "mainstream_note": "One sentence explaining the current status of this term — who is using it now and where it sits culturally.",
   "spider": {"music": 0, "social_media": 0, "regional": 0, "community": 0, "mainstream": 0, "academic": 0},
   "confidence": "High" | "Medium" | "Low",
   "confidence_note": "Confidence = certainty of Black/AAVE origin ONLY. High = origin community identifiable. Medium = origin unclear or contested. Low = little evidence. Canonical song NOT required for High. One sentence if Medium or Low. Null if High.",
@@ -1187,7 +1186,7 @@ Return this exact JSON:
     // Show the cleaned string around the failure point
     const c = clean.replace(/\n/g, ' ').replace(/[\u0001-\u001F]/g, ' ');
     const failPos = Math.min(2500, c.length);
-    throw new Error('CLEAN[' + (failPos-100) + '-' + (failPos+100) + ']: ' + c.slice(Math.max(0,failPos-100), failPos+100));
+    throw new Error('JSON parse failed — check Claude response format');
   }
 
   result._wiki   = await wikiPromise;
@@ -1364,7 +1363,6 @@ async function renderCard(term, result) {
             <div class="ms-dot"></div>
             ${esc(result.mainstream_status)}
           </div>
-          ${result.mainstream_note ? `<p style="font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:14px">${esc(result.mainstream_note)}</p>` : ''}
         </div>` : ''}
         <ul class="culture-list">${result.cultural_examples.map(ex => `<li>${esc(ex)}</li>`).join('')}</ul>
         ${result.subculture_tags && result.subculture_tags.length ? `
