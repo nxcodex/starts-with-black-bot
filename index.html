@@ -308,16 +308,17 @@ body {
   font-size: 9px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  font-weight: 500;
-  padding: 5px 9px;
+  font-weight: 700;
+  padding: 6px 12px;
   border-radius: 2px;
   white-space: nowrap;
   flex-shrink: 0;
-  margin-top: 4px;
 }
-.label-likely   { background: rgba(94,158,110,0.15); color: var(--likely); border: 1px solid rgba(94,158,110,0.3); }
-.label-possibly { background: var(--accent-d); color: var(--accent); border: 1px solid rgba(200,146,42,0.3); }
-.label-unlikely { background: rgba(85,85,85,0.12); color: var(--unlikely); border: 1px solid #2e2e2e; }
+/* Origin labels — filled, cool palette, distinct from confidence */
+.label-likely   { background: #1A6B6B; color: #A8DEDE; border: 1px solid #2A8A8A; }
+.label-possibly { background: #1E3A5F; color: #90B4D8; border: 1px solid #2A5080; }
+.label-unlikely { background: #4A2535; color: #C49AAA; border: 1px solid #6A3045; }
+.label-unknown  { background: #2E2E2E; color: #9A9080; border: 1px solid #3E3E3A; }
 .card-body { padding: 20px 22px; }
 .result-section { margin-bottom: 20px; }
 .result-section:last-child { margin-bottom: 0; }
@@ -358,13 +359,15 @@ body {
   letter-spacing: 0.14em;
   text-transform: uppercase;
   font-weight: 600;
-  padding: 4px 9px;
+  padding: 6px 12px;
   border-radius: 2px;
   white-space: nowrap;
+  flex-shrink: 0;
 }
-.conf-high     { background: rgba(94,158,110,0.15);  color: #5E9E6E; border: 1px solid rgba(94,158,110,0.3); }
-.conf-medium   { background: var(--accent-d);         color: var(--accent); border: 1px solid rgba(200,146,42,0.3); }
-.conf-low      { background: rgba(85,85,85,0.12);    color: #666; border: 1px solid #333; }
+/* Confidence pills — outlined only, amber scale */
+.conf-high   { background: transparent; color: #5E9E6E; border: 1px solid rgba(94,158,110,0.5); }
+.conf-medium { background: transparent; color: var(--accent); border: 1px solid rgba(200,146,42,0.5); }
+.conf-low    { background: transparent; color: #888; border: 1px solid #444; }
 
 /* ── SPIDER CHART ────────────────────────────────────────────────── */
 .spider-wrap {
@@ -882,7 +885,7 @@ async function analyzeTerm(term) {
 - #ThanksgivingClapBack and #BlackGirlMagic are stronger AAVE signals than #BlackLivesMatter 2020 which went mainstream
 - Hip-hop is a primary site of AAVE innovation — specific track and artist references matter
 - Many newer AAVE terms have no academic papers — use your cultural knowledge instead
-- LABEL CRITERIA: Use "Likely Black Origin" when you can identify the specific Black community of origin — ballroom, Southern hip-hop, Bay Area, Black Twitter, etc. The METHOD of spread (social media vs song vs oral) does NOT affect the label. Only use "Probably" when the community of origin is genuinely unclear. Only use "Unlikely" when evidence points away from Black origin.
+- LABEL CRITERIA: Use "Likely Black Origin" when you can identify the specific Black community of origin — ballroom, Southern hip-hop, Bay Area, Black Twitter, etc. The METHOD of spread does NOT affect the label. Use "Probably Black Origin" when origin suggests Black culture but is not fully conclusive. Use "Unlikely Black Origin" when the term originated in a subculture but cannot be determined as specifically Black. Use "Unknown Origin" when evidence is genuinely inconclusive and origin cannot be determined — not the same as Unlikely.
 - CONFIDENCE: High = origin community is identifiable even if spread was informal. Medium = origin community is unclear or contested. Low = little evidence either way. A canonical song is NOT required for High confidence.
 Return ONLY valid JSON. No preamble, no markdown.`;
 
@@ -901,7 +904,7 @@ Spider chart scores (0-10 each):
 
 Return this exact JSON:
 {
-  "label": "Likely Black Origin" | "Probably Black Origin" | "Unlikely Black Origin",
+  "label": "Likely Black Origin" | "Probably Black Origin" | "Unlikely Black Origin" | "Unknown Origin",
   "rationale": "2-3 sentences making the case. Be specific — name the community, era, usage pattern. No vague hedging.",
   "description": "What this term means and how people use it. Specific to this term.",
   "origin_context": "The real origin story — name the artist, song, region, subculture, or moment. Give a year. Do not generalize.",
@@ -940,7 +943,12 @@ async function renderCard(term, result) {
   const card = document.getElementById(safeId(term));
   if (!card) return;
 
-  const lc = { 'Likely Black Origin': 'label-likely', 'Probably Black Origin': 'label-possibly', 'Unlikely Black Origin': 'label-unlikely' }[result.label] || 'label-unlikely';
+  const lc = {
+    'Likely Black Origin':   'label-likely',
+    'Probably Black Origin': 'label-possibly',
+    'Unlikely Black Origin': 'label-unlikely',
+    'Unknown Origin':        'label-unknown',
+  }[result.label] || 'label-unknown';
 
   // Corpus section
   const cd = lookupTerm(term);
