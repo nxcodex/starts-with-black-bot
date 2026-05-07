@@ -1084,8 +1084,32 @@ Return this exact JSON:
 }`;
 
   const raw = await callClaude(sys, msg);
-  const clean = raw.replace(/```json|```/g, '').replace(/,(\s*[}\]])/g, '$1').trim();
-  const result = JSON.parse(clean);
+  function cleanJSON(str) {
+    // Strip markdown fences
+    str = str.replace(/```json|```/g, '').trim();
+    // Remove trailing commas before } or ]
+    str = str.replace(/,(\s*[}\]])/g, '$1');
+    // Find the outermost { } block in case Claude added preamble
+    const start = str.indexOf('{');
+    const end   = str.lastIndexOf('}');
+    if (start !== -1 && end !== -1) str = str.slice(start, end + 1);
+    return str;
+  }
+  const clean = cleanJSON(raw);
+  let result;
+  try {
+    result = JSON.parse(clean);
+  } catch(parseErr) {
+    // Try a more aggressive clean — replace unescaped newlines inside strings
+    const aggressiveClean = clean
+      .replace(/
+/g, ' ')
+      .replace(/
+/g, '')
+      .replace(/	/g, ' ')
+      .replace(/[ --]/g, ' ');
+    result = JSON.parse(aggressiveClean);
+  }
   result._wiki   = await wikiPromise;
   result._genius = result.genius_query ? await searchGenius(result.genius_query) : [];
 
