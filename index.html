@@ -1183,7 +1183,11 @@ Return this exact JSON:
     catch(e) { /* try next */ }
   }
 
-  if (!result) throw new Error('Could not parse Claude response as JSON after 4 attempts');
+  if (!result) {
+    // Show raw response in error so we can diagnose
+    const preview = raw.slice(0, 300).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    throw new Error('Parse failed. Raw response preview: ' + raw.slice(0, 200));
+  }
 
   result._wiki   = await wikiPromise;
   result._genius = result.genius_query ? await searchGenius(result.genius_query) : [];
