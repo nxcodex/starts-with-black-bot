@@ -344,34 +344,27 @@ body {
 .corpus-coll { color: var(--accent); }
 .corpus-count { color: var(--text); }
 
-/* ── CONFIDENCE BOX ──────────────────────────────────────────────── */
-.confidence-box {
-  border-left: 3px solid var(--accent);
-  background: var(--accent-d);
-  border-radius: 0 var(--r) var(--r) 0;
-  padding: 12px 16px;
-  margin-bottom: 20px;
+/* ── CONFIDENCE PILL ─────────────────────────────────────────────── */
+.origin-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+  flex-wrap: wrap;
 }
-.confidence-box-label {
+.conf-pill {
   font-family: var(--fm);
   font-size: 9px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--accent);
-  margin-bottom: 6px;
-}
-.confidence-box-level {
-  font-family: var(--fm);
-  font-size: 12px;
   font-weight: 600;
-  color: var(--text);
-  margin-bottom: 4px;
+  padding: 4px 9px;
+  border-radius: 2px;
+  white-space: nowrap;
 }
-.confidence-box-note {
-  font-size: 13px;
-  color: var(--muted);
-  line-height: 1.6;
-}
+.conf-high     { background: rgba(94,158,110,0.15);  color: #5E9E6E; border: 1px solid rgba(94,158,110,0.3); }
+.conf-medium   { background: var(--accent-d);         color: var(--accent); border: 1px solid rgba(200,146,42,0.3); }
+.conf-low      { background: rgba(85,85,85,0.12);    color: #666; border: 1px solid #333; }
 
 /* ── SPIDER CHART ────────────────────────────────────────────────── */
 .spider-wrap {
@@ -381,32 +374,7 @@ body {
   align-items: center;
   gap: 16px;
 }
-.spider-labels {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 8px;
-  width: 100%;
-  max-width: 320px;
-}
-.spider-label-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-family: var(--fm);
-  font-size: 10px;
-  color: var(--muted);
-  letter-spacing: 0.06em;
-}
-.spider-label-dot {
-  width: 6px; height: 6px;
-  border-radius: 50%;
-  background: var(--accent);
-  flex-shrink: 0;
-}
-.spider-label-score {
-  color: var(--text);
-  font-weight: 600;
-}
+
 
 /* ── CULTURE BULLETS ─────────────────────────────────────────────── */
 .culture-list {
@@ -1053,8 +1021,7 @@ async function renderCard(term, result) {
       const p = pt(i, Math.max(0, Math.min(10, s[d.key] || 0)));
       return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="#C8922A"/>`;
     }).join('');
-    const scoreItems = dims.map(d => `<div class="spider-label-item"><div class="spider-label-dot"></div><span>${d.label} <span class="spider-label-score">${s[d.key] || 0}</span></span></div>`).join('');
-    spiderHtml = `<div class="spider-wrap"><svg viewBox="0 0 220 220" width="220" height="220" style="overflow:visible">${gridLines}${axes}<polygon points="${dataPts}" fill="rgba(200,146,42,0.15)" stroke="#C8922A" stroke-width="1.5"/>${dots}${labelEls}</svg><div class="spider-labels">${scoreItems}</div></div>`;
+    spiderHtml = `<div class="spider-wrap"><svg viewBox="0 0 220 220" width="220" height="220" style="overflow:visible">${gridLines}${axes}<polygon points="${dataPts}" fill="rgba(200,146,42,0.15)" stroke="#C8922A" stroke-width="1.5"/>${dots}${labelEls}</svg></div>`;
   }
 
   // Build In Music block
@@ -1073,8 +1040,11 @@ async function renderCard(term, result) {
     <div class="card-body">
       <div class="result-section">
         <div class="section-label">Probability of AAVE Origin</div>
-        <div class="result-label ${lc}" style="display:inline-block;margin-bottom:12px">${esc(result.label)}</div>
-        ${result.confidence ? `<div class="confidence-box"><div class="confidence-box-label">Confidence</div><div class="confidence-box-level">${esc(result.confidence)}</div>${result.confidence_note ? `<div class="confidence-box-note">${esc(result.confidence_note)}</div>` : ''}</div>` : ''}
+        <div class="origin-row">
+          <div class="result-label ${lc}" style="display:inline-block">${esc(result.label)}</div>
+          ${result.confidence ? `<div class="conf-pill conf-${esc(result.confidence.toLowerCase())}">${esc(result.confidence)} Confidence</div>` : ''}
+        </div>
+        ${result.confidence_note ? `<p style="margin-top:8px;font-size:13px;color:var(--muted);line-height:1.6">${esc(result.confidence_note)}</p>` : ''}
       </div>
       <div class="result-section">
         <div class="section-label">Analysis</div>
