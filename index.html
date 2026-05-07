@@ -1108,6 +1108,7 @@ Return this exact JSON:
       .replace(/\t/g, ' ')
       .replace(/[\u0001-\u001F\u007F-\u009F]/g, ' ');
     result = JSON.parse(aggressiveClean);
+  }
   result._wiki   = await wikiPromise;
   result._genius = result.genius_query ? await searchGenius(result.genius_query) : [];
 
