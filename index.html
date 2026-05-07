@@ -1184,9 +1184,10 @@ Return this exact JSON:
   }
 
   if (!result) {
-    // Show raw response in error so we can diagnose
-    const preview = raw.slice(0, 300).replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    throw new Error('Parse failed. Raw response preview: ' + raw.slice(0, 200));
+    // Show the cleaned string around the failure point
+    const c = clean.replace(/\n/g, ' ').replace(/[\u0001-\u001F]/g, ' ');
+    const failPos = Math.min(2500, c.length);
+    throw new Error('CLEAN[' + (failPos-100) + '-' + (failPos+100) + ']: ' + c.slice(Math.max(0,failPos-100), failPos+100));
   }
 
   result._wiki   = await wikiPromise;
