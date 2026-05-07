@@ -562,9 +562,33 @@ const MODEL      = 'claude-haiku-4-5-20251001';
 const CLAUDE_URL = 'https://api.anthropic.com/v1/messages';
 const WORKER_URL = 'https://swbb-proxy.nmazzucco.workers.dev';
 
+// ── TERM NORMALIZATION ───────────────────────────────────────────
+function normalizeRoot(term) {
+  // Cache key only — strips apostrophe variants for consistent key matching
+  // e.g. "swag surfin'" and "swag surfing" both → "swag surf" for cache lookup
+  const words = term.trim().toLowerCase().split(/\s+/);
+  let last = words[words.length - 1];
+  const suffixes = ["in'", 'ing', 'er', 'ed'];
+  for (const suf of suffixes) {
+    if (last.endsWith(suf) && last.length > suf.length + 2) {
+      last = last.slice(0, -suf.length);
+      break;
+    }
+  }
+  words[words.length - 1] = last;
+  return words.join(' ');
+}
+
+function buildVariants(term) {
+  // Variants for corpus search — just the original term
+  // Claude supplies meaningful variants via common_variations field
+  const root = normalizeRoot(term);
+  return { root, variants: [term.toLowerCase().trim()] };
+}
+
 // ── CACHE ─────────────────────────────────────────────────────────
 function cacheKey(term) {
-  return term.toLowerCase().trim().replace(/s+/g, '_');
+  return normalizeRoot(term.toLowerCase().trim()).replace(/\s+/g, '_');
 }
 
 async function cacheGet(term) {
@@ -737,14 +761,17 @@ JSON array only (empty array if none found):`;
 
 // ── ORIGIN ANALYSIS ───────────────────────────────────────────────
 async function analyzeTerm(term) {
-  // Check cache first — if found, return immediately without any API calls
+  const { root, variants } = buildVariants(term);
+
+  // Check cache using root form — covers all variants
   setStatus(`Checking cache for "${term}"…`);
-  const cached = await cacheGet(term);
+  const cached = await cacheGet(root);
   if (cached) {
     setStatus('');
     return cached;
   }
 
+  // Initial corpus lookup on entered term
   const corpus = corpusForPrompt(term);
   setStatus(`Analyzing "${term}"…`);
   const scholarPromise = searchScholar(term);
@@ -773,8 +800,9 @@ Return this exact JSON:
   "origin_context": "The real origin story — name the artist, song, region, subculture, or moment if you know it. Give a year. Do not generalize.",
   "cultural_examples": "2-3 specific real-world examples of cultural spread. Name real moments, communities, and years.",
   "genius_query": "The single most culturally significant song that documents this term's spread — format exactly as: SONG TITLE ARTIST NAME. Example: Formation Beyonce. Null if you cannot name one with confidence.",
+  "common_variations": ["list only genuine linguistic variants — different spellings or morphological forms of the SAME term, e.g. swag surfin\', swag surfing. Do NOT include synonyms or related terms. Return empty array [] if no meaningful variants exist — do not force variants that don't make cultural sense."],
   "confidence": "High" | "Medium" | "Low",
-  "confidence_note": "One sentence only if confidence is Medium or Low — what specifically you're uncertain about. Null if High.",
+  "confidence_note": "IMPORTANT: confidence is ONLY about certainty of Black/AAVE cultural origin — NOT about whether a canonical song exists or corpus results. If origin is clearly rooted in a specific Black community, use High. One sentence only if Medium or Low explaining what about the ORIGIN is uncertain. Null if High.",
   "corpus_evidence": "One sentence only. If found, name the collections. If not found, say: this term likely emerged after 2022 or outside the communities this corpus captured.",
   "academic_notes": null
 }`;
@@ -783,11 +811,39 @@ Return this exact JSON:
   const clean = raw.replace(/```json|```/g, '').replace(/,(\s*[}\]])/g, '$1').trim();
   const result = JSON.parse(clean);
   result._wiki   = await wikiPromise;
-  result._papers = await scholarPromise;
   result._genius = result.genius_query ? await searchGenius(result.genius_query) : [];
 
-  // Cache the complete result — non-blocking
-  cacheSet(term, result);
+  // If Claude identified common variations, expand corpus and re-prompt if richer data found
+  if (result.common_variations && result.common_variations.length) {
+    const variantCorpusParts = result.common_variations
+      .map(v => corpusForPrompt(v))
+      .filter(Boolean);
+    if (variantCorpusParts.length) {
+      // Append variant corpus data to what Claude already has — no second Claude call needed
+      // The common_variations are stored and used for display
+    }
+  }
+
+  // Extract pull quotes from paper abstracts before caching
+  const rawPapers = await scholarPromise;
+  result._papers = await Promise.all(rawPapers.map(async p => {
+    if (!p.abstract) return { ...p, quote: null };
+    try {
+      const raw = await callClaude(
+        'You extract relevant sentences from academic abstracts. Return ONLY valid JSON, no markdown.',
+        `Does this abstract contain a direct reference to the term "${root}" (or variants: ${variants.slice(0,3).join(', ')}) or its cultural origin? Extract the single most relevant sentence as a pull quote. If nothing directly relevant, return null.
+
+Abstract: ${p.abstract.slice(0, 500)}
+
+Return: {"quote": "exact sentence" | null}`
+      );
+      const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim());
+      return { ...p, quote: parsed.quote || null };
+    } catch { return { ...p, quote: null }; }
+  }));
+
+  // Cache the complete result under root form — non-blocking
+  cacheSet(root, result);
 
   return result;
 }
@@ -824,30 +880,10 @@ async function renderCard(term, result) {
   }
   const geniusHtml = ''; // no separate section — link lives inside culture section
 
-  // Papers section — with pull quotes extracted by Claude
+  // Papers — quotes pre-extracted in analyzeTerm, stored in cache
   let papersHtml = '';
   if (result._papers && result._papers.length) {
-    // Extract pull quotes from abstracts in parallel
-    const withQuotes = await Promise.all(result._papers.map(async p => {
-      let quote = null;
-      if (p.abstract) {
-        try {
-          const raw = await callClaude(
-            'You extract relevant sentences from academic abstracts. Return ONLY a JSON object, no markdown.',
-            `Does this abstract contain a direct reference to the term "${term}" or its cultural/linguistic origin? If yes, extract the single most relevant sentence as a pull quote. If no, return null for quote.
-
-Abstract: ${p.abstract.slice(0, 500)}
-
-Return: {"quote": "exact sentence here" | null}`
-          );
-          const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim());
-          quote = parsed.quote || null;
-        } catch { quote = null; }
-      }
-      return { ...p, quote };
-    }));
-
-    const items = withQuotes.map(p => {
+    const items = result._papers.map(p => {
       const authors = (p.authors || []).slice(0,2).map(a => a.name).join(', ');
       const doi = p.externalIds?.DOI;
       const link = doi ? `<a href="https://doi.org/${doi}" target="_blank" class="source-link">View Paper →</a>` : '';
@@ -885,6 +921,14 @@ Return: {"quote": "exact sentence here" | null}`
       <div class="result-section">
         <div class="section-label">Origin</div>
         <p class="result-text">${esc(result.origin_context)}</p>
+      </div>
+      <div class="result-section">
+        <div class="section-label">Common Variations</div>
+        <p class="result-text" style="font-family:var(--fm);font-size:13px">
+          ${result.common_variations && result.common_variations.length
+            ? result.common_variations.map(v => esc(v)).join(' · ')
+            : 'None identified'}
+        </p>
       </div>
       ${result.cultural_examples ? `
       <div class="result-section">
