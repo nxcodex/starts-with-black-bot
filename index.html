@@ -442,6 +442,7 @@ body {
 .ms-hidden     { background: rgba(26,107,107,0.2); color: #A8DEDE; border: 1px solid rgba(42,138,138,0.3); }
 .ms-crossing   { background: rgba(200,146,42,0.15); color: var(--accent); border: 1px solid rgba(200,146,42,0.3); }
 .ms-mainstream { background: rgba(74,37,53,0.3); color: #C49AAA; border: 1px solid rgba(106,48,69,0.4); }
+.ms-reclaimed  { background: rgba(30,58,95,0.3); color: #90B4D8; border: 1px solid rgba(42,80,128,0.4); }
 .ms-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
 
 /* ── IN MUSIC ────────────────────────────────────────────────────── */
@@ -582,6 +583,83 @@ body {
   cursor: pointer;
   margin-top: 10px;
 }
+
+/* ── TIMELINE ────────────────────────────────────────────────────── */
+.timeline-section { margin-top: 4px; }
+.trends-chart { width: 100%; height: 80px; margin-bottom: 20px; }
+.trends-unavailable {
+  font-family: var(--fm);
+  font-size: 10px;
+  color: var(--dim);
+  letter-spacing: 0.08em;
+  margin-bottom: 16px;
+  padding: 8px 0;
+}
+.milestone-list { list-style: none; padding: 0; margin: 0; }
+.milestone-item {
+  display: flex;
+  gap: 14px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  align-items: flex-start;
+}
+.milestone-item:last-child { border-bottom: none; }
+.milestone-year {
+  font-family: var(--fm);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  white-space: nowrap;
+  min-width: 36px;
+  padding-top: 2px;
+}
+.milestone-event {
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.6;
+}
+
+/* ── ANNOTATIONS ─────────────────────────────────────────────────── */
+.annotation-item {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 14px 16px;
+  margin-bottom: 10px;
+}
+.annotation-lyric {
+  font-family: var(--fd);
+  font-size: 13px;
+  font-style: italic;
+  color: var(--text);
+  margin-bottom: 8px;
+  line-height: 1.6;
+  border-left: 2px solid var(--accent);
+  padding-left: 10px;
+}
+.annotation-text {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+/* ── REFRESH BUTTON ──────────────────────────────────────────────── */
+.btn-refresh {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: var(--r);
+  font-family: var(--fm);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 6px 12px;
+  cursor: pointer;
+  margin-top: 20px;
+  transition: border-color 0.2s, color 0.2s;
+  display: block;
+}
+.btn-refresh:hover { border-color: var(--accent); color: var(--accent); }
 
 /* ── TOAST ───────────────────────────────────────────────────────── */
 .toast {
@@ -739,13 +817,21 @@ async function cacheGet(term) {
   } catch { return null; }
 }
 
-async function cacheSet(term, result) {
+async function cacheSet(term, result, ttl = 0) {
   try {
-    await fetch(`${WORKER_URL}/cache/set?key=${encodeURIComponent(cacheKey(term))}`, {
+    const ttlParam = ttl > 0 ? `&ttl=${ttl}` : '';
+    await fetch(`${WORKER_URL}/cache/set?key=${encodeURIComponent(cacheKey(term))}${ttlParam}`, {
       method: 'POST',
       body: JSON.stringify(result),
     });
-  } catch { /* non-blocking — cache failure doesn't break analysis */ }
+  } catch { /* non-blocking */ }
+}
+
+async function cacheDelete(term) {
+  try {
+    await fetch(`${WORKER_URL}/cache/delete?key=${encodeURIComponent(cacheKey(term))}`);
+    await fetch(`${WORKER_URL}/cache/delete?key=${encodeURIComponent(cacheKey(term) + '__cultural')}`);
+  } catch { /* non-blocking */ }
 }
 
 let apiKey    = localStorage.getItem('swbb_key') || '';
@@ -845,6 +931,31 @@ async function searchScholar(term) {
   } catch { return []; }
 }
 
+// ── GOOGLE TRENDS ────────────────────────────────────────────────
+async function fetchTrends(term) {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    const r = await fetch(`${WORKER_URL}/trends?term=${encodeURIComponent(term)}`, { signal: controller.signal });
+    clearTimeout(timeout);
+    if (!r.ok) return { points: [], status: 'unavailable' };
+    return await r.json();
+  } catch { return { points: [], status: 'unavailable' }; }
+}
+
+// ── GENIUS ANNOTATIONS ────────────────────────────────────────────
+async function fetchAnnotations(songId, term) {
+  if (!songId) return [];
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    const r = await fetch(`${WORKER_URL}/genius/annotations?id=${songId}&term=${encodeURIComponent(term)}`, { signal: controller.signal });
+    clearTimeout(timeout);
+    if (!r.ok) return [];
+    return await r.json();
+  } catch { return []; }
+}
+
 // ── GENIUS ────────────────────────────────────────────────────────
 async function searchGenius(query) {
   if (!query) return [];
@@ -902,12 +1013,17 @@ JSON array only (empty array if none found):`;
 async function analyzeTerm(term) {
   const { root, variants } = buildVariants(term);
 
-  // Check cache using root form — covers all variants
+  // Check cache — merge permanent linguistic + time-sensitive cultural
   setStatus(`Checking cache for "${term}"…`);
-  const cached = await cacheGet(root);
-  if (cached) {
-    setStatus('');
-    return cached;
+  const cachedLinguistic = await cacheGet(root);
+  if (cachedLinguistic) {
+    const cachedCultural = await cacheGet(`${root}__cultural`);
+    if (cachedCultural) {
+      setStatus('');
+      return { ...cachedLinguistic, ...cachedCultural, _cached: true };
+    }
+    // Linguistic hit but cultural expired — re-fetch cultural only
+    setStatus(`Refreshing cultural data for "${term}"…`);
   }
 
   // Initial corpus lookup on entered term
@@ -917,6 +1033,7 @@ async function analyzeTerm(term) {
 
   // All verification runs in parallel with Claude — nothing blocks analysis
   const wikiPromise    = checkWikipedia(term);
+  const trendsPromise  = fetchTrends(root);
   const geniusQuery    = null; // populated after Claude responds — see below
 
   const sys = `You are a cultural linguist who knows AAVE, Black culture, and hip-hop deeply. Write like a sharp, knowledgeable friend — plain English, no jargon, no filler. Be specific to THIS term. Name real songs, artists, moments, years, communities. If you know exactly where something came from, say it. Do not generalize when you have real knowledge. You know:
@@ -925,9 +1042,10 @@ async function analyzeTerm(term) {
 - Hip-hop is a primary site of AAVE innovation — specific track and artist references matter
 - Many newer AAVE terms have no academic papers — use your cultural knowledge instead
 - LABEL CRITERIA: Use "Likely Black Origin" when you can identify the specific Black community of origin — ballroom, Southern hip-hop, Bay Area, Black Twitter, etc. The METHOD of spread does NOT affect the label. Use "Probably Black Origin" when origin suggests Black culture but is not fully conclusive. Use "Unlikely Black Origin" when the term originated in a subculture but cannot be determined as specifically Black. Use "Unknown Origin" when evidence is genuinely inconclusive and origin cannot be determined — not the same as Unlikely.
-- MAINSTREAM STATUS: "Still Hidden" = term is still primarily within origin community, not widely adopted outside. "Crossing Over" = term is spreading beyond origin community into broader culture, mainstream adoption beginning. "Gone Mainstream" = term has been fully adopted by mainstream culture, often stripped of original context. 
+- MAINSTREAM STATUS: "Still Hidden" = term is still primarily within origin community, not widely adopted outside. "Crossing Over" = term is spreading beyond origin community into broader culture, mainstream adoption beginning. "Gone Mainstream" = term has been fully adopted by mainstream culture, often stripped of original context. "Reclaimed" = term was mainstream but has been pulled back, redefined, or recontextualized by the origin community.
 - CONFIDENCE: High = origin community is identifiable even if spread was informal. Medium = origin community is unclear or contested. Low = little evidence either way. A canonical song is NOT required for High confidence.
-Return ONLY valid JSON. No preamble, no markdown.`
+- TIMELINE: Provide 4-8 dated milestones tracing this term from origin to present. Each milestone should be a specific, real, dateable event — a song release, a viral moment, a TV appearance, a brand adoption, a community shift. Order chronologically. Be specific with years.
+Return ONLY valid JSON. No preamble, no markdown.`;
 
   const msg = `Analyze whether "${term}" originates in AAVE.
 
@@ -952,12 +1070,16 @@ Return this exact JSON:
   "genius_query": "Most culturally significant song documenting this term — format: SONG TITLE ARTIST NAME. Example: Formation Beyonce. Null if unsure.",
   "common_variations": ["genuine linguistic variants only — different spellings or morphological forms of the SAME term. Empty array if none."],
   "subculture_tags": ["specific subcultures this term is rooted in or spread through, e.g. ballroom, Black queer, Southern hip-hop, Black Twitter, HBCU, drill, crunk. Be specific. Max 5 tags. Empty array if none clearly apply."],
- "mainstream_status": "Still Hidden" | "Crossing Over" | "Gone Mainstream",
+  "mainstream_status": "Still Hidden" | "Crossing Over" | "Gone Mainstream" | "Reclaimed",
   "mainstream_note": "One sentence explaining the current status of this term — who is using it now and where it sits culturally.",
   "spider": {"music": 0, "social_media": 0, "regional": 0, "community": 0, "mainstream": 0, "academic": 0},
   "confidence": "High" | "Medium" | "Low",
   "confidence_note": "Confidence = certainty of Black/AAVE origin ONLY. High = origin community identifiable. Medium = origin unclear or contested. Low = little evidence. Canonical song NOT required for High. One sentence if Medium or Low. Null if High.",
   "corpus_evidence": "One sentence. If found, name collections. If not: this term likely emerged after 2022 or outside the communities this corpus captured.",
+  "timeline": [
+    {"year": 1990, "event": "Brief description of what happened this year with this term"},
+    {"year": 2010, "event": "Another milestone"}
+  ],
   "academic_notes": null
 }`;
 
@@ -974,8 +1096,24 @@ Return this exact JSON:
     abstract_excerpt: p.abstract ? p.abstract.slice(0, 200) : null,
   }));
 
-  // Cache the complete result under root form — non-blocking
-  cacheSet(root, result);
+  // Split cache — linguistic analysis permanent, cultural data with TTL
+  const linguistic = {
+    label: result.label, rationale: result.rationale,
+    description: result.description, origin_context: result.origin_context,
+    common_variations: result.common_variations, subculture_tags: result.subculture_tags,
+    mainstream_status: result.mainstream_status, mainstream_note: result.mainstream_note,
+    spider: result.spider, confidence: result.confidence,
+    confidence_note: result.confidence_note, corpus_evidence: result.corpus_evidence,
+    cultural_examples: result.cultural_examples, genius_query: result.genius_query,
+    timeline: result.timeline,
+  };
+  const cultural = {
+    _wiki: result._wiki, _genius: result._genius,
+    _annotations: result._annotations, _papers: result._papers,
+    _trends: result._trends, _fetched_at: Date.now(),
+  };
+  cacheSet(root, linguistic);                           // permanent
+  cacheSet(`${root}__cultural`, cultural, 30 * 86400); // 30 day TTL
 
   return result;
 }
@@ -1136,6 +1274,79 @@ async function renderCard(term, result) {
       ${corpusHtml}
       ${papersHtml}
     </div>`;
+}
+
+// ── BUILD TIMELINE HTML ───────────────────────────────────────────
+function buildTimelineHtml(result, term) {
+  if (!result.timeline && (!result._trends || !result._trends.points?.length)) return '';
+
+  // Trends curve SVG
+  let curveHtml = '';
+  if (result._trends?.status === 'ok' && result._trends.points?.length > 1) {
+    const pts = result._trends.points;
+    const max = Math.max(...pts.map(p => p.value), 1);
+    const w = 560, h = 70, pad = 4;
+    const x = (i) => pad + (i / (pts.length - 1)) * (w - pad * 2);
+    const y = (v) => h - pad - ((v / max) * (h - pad * 2));
+    const pathD = pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${x(i).toFixed(1)} ${y(p.value).toFixed(1)}`).join(' ');
+    const areaD = `${pathD} L ${x(pts.length-1).toFixed(1)} ${h} L ${x(0).toFixed(1)} ${h} Z`;
+    curveHtml = `
+      <svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" class="trends-chart" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="tg" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#C8922A" stop-opacity="0.3"/>
+            <stop offset="100%" stop-color="#C8922A" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <path d="${areaD}" fill="url(#tg)"/>
+        <path d="${pathD}" fill="none" stroke="#C8922A" stroke-width="1.5"/>
+      </svg>
+      <p style="font-family:var(--fm);font-size:9px;color:var(--dim);letter-spacing:0.08em;margin-bottom:14px">GOOGLE SEARCH INTEREST — PAST 5 YEARS</p>`;
+  } else if (result._trends?.status === 'unavailable') {
+    curveHtml = `<p class="trends-unavailable">Search trend data temporarily unavailable — try refreshing.</p>`;
+  }
+
+  // Milestone list
+  let milestonesHtml = '';
+  if (Array.isArray(result.timeline) && result.timeline.length) {
+    const items = result.timeline
+      .sort((a, b) => a.year - b.year)
+      .map(m => `<li class="milestone-item"><span class="milestone-year">${m.year}</span><span class="milestone-event">${esc(m.event)}</span></li>`)
+      .join('');
+    milestonesHtml = `<ul class="milestone-list">${items}</ul>`;
+  }
+
+  return `
+    <div class="result-section timeline-section">
+      <div class="section-label">Timeline</div>
+      ${curveHtml}
+      ${milestonesHtml}
+    </div>`;
+}
+
+// ── BUILD ANNOTATIONS HTML ─────────────────────────────────────────
+function buildAnnotationsHtml(result) {
+  if (!result._annotations || !result._annotations.length) return '';
+  const items = result._annotations.map(a => `
+    <div class="annotation-item">
+      <div class="annotation-lyric">"${esc(a.lyric)}"</div>
+      <div class="annotation-text">${esc(a.annotation)}</div>
+    </div>`).join('');
+  return `
+    <div class="result-section">
+      <div class="section-label">Genius Annotations</div>
+      ${items}
+    </div>`;
+}
+
+// ── REFRESH CULTURAL DATA ──────────────────────────────────────────
+async function refreshCultural(term, cardId) {
+  const btn = document.querySelector(`#${cardId} .btn-refresh`);
+  if (btn) { btn.textContent = '↺ Refreshing…'; btn.disabled = true; }
+  await cacheDelete(term);
+  const result = await analyzeTerm(term);
+  await renderCard(term, result);
+  if (btn) { btn.textContent = '↺ Refresh cultural data'; btn.disabled = false; }
 }
 
 // ── RUN ANALYSIS ──────────────────────────────────────────────────
