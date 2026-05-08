@@ -927,7 +927,7 @@ async function callClaude(system, user) {
       'anthropic-version': '2023-06-01',
       'anthropic-dangerous-direct-browser-access': 'true',
     },
-    body: JSON.stringify({ model: MODEL, max_tokens: 1000, system, messages: [{ role: 'user', content: user }] }),
+    body: JSON.stringify({ model: MODEL, max_tokens: 1000, temperature: 0, system, messages: [{ role: 'user', content: user }] }),
     signal: controller.signal,
   });
   clearTimeout(timeout);
@@ -978,25 +978,35 @@ async function analyzeTerm(term) {
   const wikiPromise    = checkWikipedia(term);
   const geniusQuery    = null; // populated after Claude responds — see below
 
-  const sys = `You are a cultural linguist specializing in AAVE, Black culture, and hip-hop. Write like a sharp, knowledgeable friend. Be specific — name real artists, songs, years, communities. Do not generalize when you have real knowledge.
+  const sys = `You are a cultural linguist and expert in African American Vernacular English, Black cultural history, and hip-hop. Your job is to determine whether a term originates in Black culture. Be specific and direct. Name real eras and cultural contexts. Do not hedge when the evidence is clear.
 
-LABEL RULES:
-- "Likely Black Origin" = identifiable Black community of origin (ballroom, Southern hip-hop, Bay Area, Black Twitter, etc.)
-- "Probably Black Origin" = suggests Black origin but not fully conclusive
-- "Unlikely Black Origin" = originated in a subculture but cannot be determined as specifically Black
-- "Unknown Origin" = genuinely inconclusive, no clear community
+LABEL RULES — apply exactly one:
+- "Likely Black Origin" = evidence clearly points to Black cultural origin. The term shows documented use within Black cultural spaces before mainstream adoption. You can name a cultural context or era. The SUBCULTURE_TAGS field provides specificity — the label just confirms Black origin.
+- "Probably Black Origin" = the term has strong AAVE linguistic characteristics and context suggests Black origin, but the originating community is genuinely disputed or spans multiple communities simultaneously. Use this ONLY when origin is contested, not as a hedge.
+- "Unlikely Black Origin" = the term originated in a context that cannot be determined as specifically Black. Evidence points elsewhere or is genuinely mixed.
+- "Unknown Origin" = no identifiable community or cultural context of origin. This is the correct hedge label — use it instead of "Probably" when you are uncertain.
 
-CONFIDENCE RULES (about origin certainty ONLY — not corpus or song evidence):
-- High = origin community identifiable
-- Medium = origin unclear or contested
-- Low = little evidence either way
+CRITICAL: "Probably" means contested, not uncertain. Uncertainty = "Unknown". If you know the term came from Black culture but aren't sure which specific subculture — that is still "Likely". The subculture tags capture the specificity, not the label.
+
+CONFIDENCE RULES — about origin certainty ONLY, never about corpus presence or song evidence:
+- High = you can name a cultural context or era that points to Black origin
+- Medium = origin suggested but community split or unclear across multiple Black communities
+- Low = little evidence in either direction
 
 MAINSTREAM STATUS:
-- "Still Hidden" = primarily within origin community
-- "Crossing Over" = spreading beyond origin community
-- "Gone Mainstream" = fully absorbed by mainstream culture
+- "Still Hidden" = primarily within origin community, limited mainstream crossover
+- "Crossing Over" = actively spreading beyond origin community into broader culture
+- "Gone Mainstream" = fully absorbed by mainstream culture, often stripped of original context
 
-Return your response using EXACTLY this format with these labels — no JSON, no markdown, no extra formatting:
+FEW-SHOT EXAMPLES — use these to calibrate your label decisions:
+- "slay" → Likely Black Origin | High confidence. Documented in Black queer ballroom culture from the 1980s before any mainstream adoption.
+- "no cap" → Likely Black Origin | High confidence. Emerged from Atlanta hip-hop and trap culture in the 2010s.
+- "bussin" → Likely Black Origin | High confidence. AAVE food/quality term with clear Black cultural roots predating viral spread.
+- "rizz" → Probably Black Origin | Medium confidence. Strong AAVE characteristics, popularized through Black internet culture, but originating community genuinely contested.
+- "GOAT" → Unknown Origin | Low confidence. Sports/entertainment acronym, not traceable to a specific cultural community.
+- "sussy" → Unlikely Black Origin | Low confidence. Gaming culture origin (Among Us), adopted broadly but not from Black cultural spaces.
+
+Return your response using EXACTLY this format — no JSON, no markdown, no extra text:
 
 LABEL: [one of the four labels above]
 CONFIDENCE: [High, Medium, or Low]
