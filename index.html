@@ -584,40 +584,8 @@ body {
   margin-top: 10px;
 }
 
-/* ── TIMELINE ────────────────────────────────────────────────────── */
-.timeline-section { margin-top: 4px; }
-.trends-chart { width: 100%; height: 80px; margin-bottom: 20px; }
-.trends-unavailable {
-  font-family: var(--fm);
-  font-size: 10px;
-  color: var(--dim);
-  letter-spacing: 0.08em;
-  margin-bottom: 16px;
-  padding: 8px 0;
-}
-.milestone-list { list-style: none; padding: 0; margin: 0; }
-.milestone-item {
-  display: flex;
-  gap: 14px;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--border);
-  align-items: flex-start;
-}
-.milestone-item:last-child { border-bottom: none; }
-.milestone-year {
-  font-family: var(--fm);
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--accent);
-  white-space: nowrap;
-  min-width: 36px;
-  padding-top: 2px;
-}
-.milestone-event {
-  font-size: 13px;
-  color: var(--text);
-  line-height: 1.6;
-}
+
+
 
 /* ── ANNOTATIONS ─────────────────────────────────────────────────── */
 .annotation-item {
@@ -931,31 +899,6 @@ async function searchScholar(term) {
   } catch { return []; }
 }
 
-// ── GOOGLE TRENDS ────────────────────────────────────────────────
-async function fetchTrends(term) {
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
-    const r = await fetch(`${WORKER_URL}/trends?term=${encodeURIComponent(term)}`, { signal: controller.signal });
-    clearTimeout(timeout);
-    if (!r.ok) return { points: [], status: 'unavailable' };
-    return await r.json();
-  } catch { return { points: [], status: 'unavailable' }; }
-}
-
-// ── GENIUS ANNOTATIONS ────────────────────────────────────────────
-async function fetchAnnotations(songId, term) {
-  if (!songId) return [];
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
-    const r = await fetch(`${WORKER_URL}/genius/annotations?id=${songId}&term=${encodeURIComponent(term)}`, { signal: controller.signal });
-    clearTimeout(timeout);
-    if (!r.ok) return [];
-    return await r.json();
-  } catch { return []; }
-}
-
 // ── GENIUS ────────────────────────────────────────────────────────
 async function searchGenius(query) {
   if (!query) return [];
@@ -1033,7 +976,6 @@ async function analyzeTerm(term) {
 
   // All verification runs in parallel with Claude — nothing blocks analysis
   const wikiPromise    = checkWikipedia(term);
-  const trendsPromise  = fetchTrends(root);
   const geniusQuery    = null; // populated after Claude responds — see below
 
   const sys = `You are a cultural linguist specializing in AAVE, Black culture, and hip-hop. Write like a sharp, knowledgeable friend. Be specific — name real artists, songs, years, communities. Do not generalize when you have real knowledge.
@@ -1063,7 +1005,7 @@ DESCRIPTION: [What the term means and how people use it. Specific, not generic]
 ORIGIN: [Real origin story — artist, song, region, subculture, moment, year. Do not generalize]
 MAINSTREAM_STATUS: [one of the three statuses above]
 GENIUS_QUERY: [Most culturally significant song — format: SONG TITLE ARTIST NAME. Example: Formation Beyonce. Write null if unsure]
-COMMON_VARIATIONS: [comma-separated genuine variants, or "none"]
+COMMON_VARIATIONS: [AAVE-specific orthographic or phonological variants of this exact term only — different spellings of the SAME AAVE word, e.g. lewk for lewks, bussin for bussing. Do NOT include the standard English word this term derives from. Write "none" if no AAVE-specific variants exist]
 SUBCULTURE_TAGS: [comma-separated specific subcultures, max 5, or "none"]
 SPIDER_MUSIC: [0-10]
 SPIDER_SOCIAL: [0-10]
@@ -1076,11 +1018,7 @@ CULTURAL_EXAMPLES:
 - [Specific example 1 — real moment, community, year]
 - [Specific example 2 — real moment, community, year]
 - [Specific example 3 — real moment, community, year]
-TIMELINE:
-[YEAR]: [Specific milestone for this term]
-[YEAR]: [Specific milestone]
-[YEAR]: [Specific milestone]
-[Add more as needed, 4-8 total]`;
+`;
 
   const msg = `Analyze whether "${term}" originates in AAVE.
 
@@ -1145,11 +1083,6 @@ Use the exact format specified. No JSON. No markdown. No extra text.`;
     function flush() {
       if (mode === 'CULTURAL_EXAMPLES') {
         r.cultural_examples = buffer.filter(l => l.trim().startsWith('-')).map(l => l.replace(/^\s*-\s*/, '').trim());
-      } else if (mode === 'TIMELINE') {
-        r.timeline = buffer
-          .filter(l => /^\d{4}:/.test(l.trim()))
-          .map(l => { const m = l.trim().match(/^(\d{4}):\s*(.+)$/); return m ? {year: parseInt(m[1]), event: m[2].trim()} : null; })
-          .filter(Boolean);
       }
       buffer = [];
       mode = null;
@@ -1160,7 +1093,6 @@ Use the exact format specified. No JSON. No markdown. No extra text.`;
       if (!trimmed) continue;
 
       if (trimmed === 'CULTURAL_EXAMPLES:') { flush(); mode = 'CULTURAL_EXAMPLES'; continue; }
-      if (trimmed === 'TIMELINE:') { flush(); mode = 'TIMELINE'; continue; }
 
       if (mode) { buffer.push(trimmed); continue; }
 
@@ -1216,8 +1148,7 @@ Use the exact format specified. No JSON. No markdown. No extra text.`;
   };
   const cultural = {
     _wiki: result._wiki, _genius: result._genius,
-    _annotations: result._annotations, _papers: result._papers,
-    _trends: result._trends, _fetched_at: Date.now(),
+    _papers: result._papers, _fetched_at: Date.now(),
   };
   cacheSet(root, linguistic);                           // permanent
   cacheSet(`${root}__cultural`, cultural, 30 * 86400); // 30 day TTL
@@ -1380,79 +1311,6 @@ async function renderCard(term, result) {
       ${corpusHtml}
       ${papersHtml}
     </div>`;
-}
-
-// ── BUILD TIMELINE HTML ───────────────────────────────────────────
-function buildTimelineHtml(result, term) {
-  if (!result.timeline && (!result._trends || !result._trends.points?.length)) return '';
-
-  // Trends curve SVG
-  let curveHtml = '';
-  if (result._trends?.status === 'ok' && result._trends.points?.length > 1) {
-    const pts = result._trends.points;
-    const max = Math.max(...pts.map(p => p.value), 1);
-    const w = 560, h = 70, pad = 4;
-    const x = (i) => pad + (i / (pts.length - 1)) * (w - pad * 2);
-    const y = (v) => h - pad - ((v / max) * (h - pad * 2));
-    const pathD = pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${x(i).toFixed(1)} ${y(p.value).toFixed(1)}`).join(' ');
-    const areaD = `${pathD} L ${x(pts.length-1).toFixed(1)} ${h} L ${x(0).toFixed(1)} ${h} Z`;
-    curveHtml = `
-      <svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" class="trends-chart" preserveAspectRatio="none">
-        <defs>
-          <linearGradient id="tg" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="#C8922A" stop-opacity="0.3"/>
-            <stop offset="100%" stop-color="#C8922A" stop-opacity="0"/>
-          </linearGradient>
-        </defs>
-        <path d="${areaD}" fill="url(#tg)"/>
-        <path d="${pathD}" fill="none" stroke="#C8922A" stroke-width="1.5"/>
-      </svg>
-      <p style="font-family:var(--fm);font-size:9px;color:var(--dim);letter-spacing:0.08em;margin-bottom:14px">GOOGLE SEARCH INTEREST — PAST 5 YEARS</p>`;
-  } else if (result._trends?.status === 'unavailable') {
-    curveHtml = `<p class="trends-unavailable">Search trend data temporarily unavailable — try refreshing.</p>`;
-  }
-
-  // Milestone list
-  let milestonesHtml = '';
-  if (Array.isArray(result.timeline) && result.timeline.length) {
-    const items = result.timeline
-      .sort((a, b) => a.year - b.year)
-      .map(m => `<li class="milestone-item"><span class="milestone-year">${m.year}</span><span class="milestone-event">${esc(m.event)}</span></li>`)
-      .join('');
-    milestonesHtml = `<ul class="milestone-list">${items}</ul>`;
-  }
-
-  return `
-    <div class="result-section timeline-section">
-      <div class="section-label">Timeline</div>
-      ${curveHtml}
-      ${milestonesHtml}
-    </div>`;
-}
-
-// ── BUILD ANNOTATIONS HTML ─────────────────────────────────────────
-function buildAnnotationsHtml(result) {
-  if (!result._annotations || !result._annotations.length) return '';
-  const items = result._annotations.map(a => `
-    <div class="annotation-item">
-      <div class="annotation-lyric">"${esc(a.lyric)}"</div>
-      <div class="annotation-text">${esc(a.annotation)}</div>
-    </div>`).join('');
-  return `
-    <div class="result-section">
-      <div class="section-label">Genius Annotations</div>
-      ${items}
-    </div>`;
-}
-
-// ── REFRESH CULTURAL DATA ──────────────────────────────────────────
-async function refreshCultural(term, cardId) {
-  const btn = document.querySelector(`#${cardId} .btn-refresh`);
-  if (btn) { btn.textContent = '↺ Refreshing…'; btn.disabled = true; }
-  await cacheDelete(term);
-  const result = await analyzeTerm(term);
-  await renderCard(term, result);
-  if (btn) { btn.textContent = '↺ Refresh cultural data'; btn.disabled = false; }
 }
 
 // ── RUN ANALYSIS ──────────────────────────────────────────────────
