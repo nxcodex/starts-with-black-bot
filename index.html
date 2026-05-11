@@ -516,9 +516,7 @@ body {
   font-size: 11px;
   letter-spacing: 0.06em;
   color: var(--muted);
-  margin-bottom: 10px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--border);
+  margin-bottom: 12px;
 }
 .first-appeared-label {
   color: var(--accent);
@@ -1356,32 +1354,27 @@ async function renderCard(term, result) {
         </div>` : ''}
         <p class="result-text">${esc(result.origin_context)}</p>
       </div>
-      <div class="result-section">
-        <div class="section-label">Common Variations</div>
-        <p class="result-text" style="font-family:var(--fm);font-size:13px">${result.common_variations && result.common_variations.length ? result.common_variations.map(v => esc(v)).join(' · ') : 'None identified'}</p>
-      </div>
+
       ${Array.isArray(result.cultural_examples) && result.cultural_examples.length ? `
       <div class="result-section">
         <div class="section-label">In the Culture</div>
         ${result.mainstream_status ? `
-        <div>
-          <div class="${'ms-' + result.mainstream_status.toLowerCase().replace(/\s+/g, '').replace('gonemainstream','mainstream').replace('stillhidden','hidden').replace('crossingover','crossing')} mainstream-badge">
-            <div class="ms-dot"></div>
-            ${esc(result.mainstream_status)}
-          </div>
-        </div>` : ''}
+        <div class="${'ms-' + result.mainstream_status.toLowerCase().replace(/\s+/g, '').replace('gonemainstream','mainstream').replace('stillhidden','hidden').replace('crossingover','crossing')} mainstream-badge"><div class="ms-dot"></div>${esc(result.mainstream_status)}</div>` : ''}
         <ul class="culture-list">${result.cultural_examples.map(ex => `<li>${esc(ex)}</li>`).join('')}</ul>
         ${result.subculture_tags && result.subculture_tags.length ? `
-        <div class="subculture-tags">
-          ${result.subculture_tags.map(tag => `<div class="subculture-tag">${esc(tag)}</div>`).join('')}
+        <div style="margin-top:16px">
+          <div class="section-label" style="margin-bottom:8px">Known Subcultures</div>
+          <div class="subculture-tags">${result.subculture_tags.map(tag => `<div class="subculture-tag">${esc(tag)}</div>`).join('')}</div>
+        </div>` : ''}
+        ${result.common_variations && result.common_variations.length ? `
+        <div style="margin-top:14px">
+          <div class="section-label" style="margin-bottom:6px">Common Variations</div>
+          <p style="font-family:var(--fm);font-size:13px;color:var(--text)">${result.common_variations.map(v => esc(v)).join(' · ')}</p>
         </div>` : ''}
         ${spiderHtml}
       </div>` : ''}
       ${musicHtml}
       ${result._wiki ? `<div class="result-section"><div class="section-label">Wikipedia</div><p class="result-text" style="font-size:14px">${esc(result._wiki.summary)}${result._wiki.summary.length >= 200 ? '…' : ''}</p>${result._wiki.url ? `<a href="${result._wiki.url}" target="_blank" class="source-link" style="display:inline-block;margin-top:8px">Read on Wikipedia →</a>` : ''}</div>` : ''}
-      ${corpusHtml}
-      ${papersHtml}
-
       ${Array.isArray(result.timeline) && result.timeline.length >= 3 ? `
       <div class="result-section">
         <div class="section-label">Timeline</div>
@@ -1389,6 +1382,8 @@ async function renderCard(term, result) {
           ${result.timeline.sort((a,b) => a.year - b.year).map(m => `<li class="timeline-item"><span class="timeline-year">${m.year}</span><span class="timeline-event">${esc(m.event)}</span></li>`).join("")}
         </ul>
       </div>` : ""}
+      ${corpusHtml}
+      ${papersHtml}
 
     </div>`;
 }
