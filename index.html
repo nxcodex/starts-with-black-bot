@@ -314,11 +314,11 @@ body {
   white-space: nowrap;
   flex-shrink: 0;
 }
-/* Origin labels — filled, cool palette, distinct from confidence */
-.label-likely   { background: #1A6B6B; color: #A8DEDE; border: 1px solid #2A8A8A; }
-.label-possibly { background: #1E3A5F; color: #90B4D8; border: 1px solid #2A5080; }
-.label-unlikely { background: #4A2535; color: #C49AAA; border: 1px solid #6A3045; }
-.label-unknown  { background: #2E2E2E; color: #9A9080; border: 1px solid #3E3E3A; }
+/* Origin labels — categorical, desaturated, evidence not verdict */
+.label-likely   { background: rgba(72,138,98,0.18);  border: 1px solid rgba(72,138,98,0.35);  color: #8EC4A4; }
+.label-possibly { background: rgba(176,138,58,0.16); border: 1px solid rgba(176,138,58,0.32); color: #C4AA6A; }
+.label-unlikely { background: rgba(176,82,100,0.15); border: 1px solid rgba(176,82,100,0.30); color: #C48A98; }
+.label-unknown  { background: rgba(82,122,178,0.15); border: 1px solid rgba(82,122,178,0.30); color: #8AAACE; }
 .card-body { padding: 20px 22px; }
 .result-section { margin-bottom: 20px; }
 .result-section:last-child { margin-bottom: 0; }
@@ -364,10 +364,10 @@ body {
   white-space: nowrap;
   flex-shrink: 0;
 }
-/* Confidence pills — outlined only, amber scale */
-.conf-high   { background: transparent; color: #5E9E6E; border: 1px solid rgba(94,158,110,0.5); }
-.conf-medium { background: transparent; color: var(--accent); border: 1px solid rgba(200,146,42,0.5); }
-.conf-low    { background: transparent; color: #888; border: 1px solid #444; }
+/* Confidence pills — neutral grey, all states identical treatment */
+.conf-high   { background: rgba(150,150,150,0.08); color: #666; border: 1px solid #333; }
+.conf-medium { background: rgba(150,150,150,0.08); color: #666; border: 1px solid #333; }
+.conf-low    { background: rgba(150,150,150,0.08); color: #666; border: 1px solid #333; }
 
 /* ── SPIDER CHART ────────────────────────────────────────────────── */
 .spider-wrap {
@@ -988,10 +988,10 @@ LABEL RULES — apply exactly one:
 
 CRITICAL: "Probably" means contested, not uncertain. Uncertainty = "Unknown". If you know the term came from Black culture but aren't sure which specific subculture — that is still "Likely". The subculture tags capture the specificity, not the label.
 
-CONFIDENCE RULES — about origin certainty ONLY, never about corpus presence or song evidence:
-- High = you can name a cultural context or era that points to Black origin
-- Medium = origin suggested but community split or unclear across multiple Black communities
-- Low = little evidence in either direction
+CONFIDENCE RULES — how certain are we about this result, regardless of label direction:
+- High = origin is clear and well-documented. Use High for BOTH clear Black origin AND clear non-Black origin. MAGA is High confidence Unlikely. Slay is High confidence Likely.
+- Medium = origin is suggested but not fully documented, or community is genuinely split
+- Low = genuinely ambiguous, evidence thin in all directions
 
 MAINSTREAM STATUS:
 - "Still Hidden" = primarily within origin community, limited mainstream crossover
