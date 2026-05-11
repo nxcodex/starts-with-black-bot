@@ -445,6 +445,32 @@ body {
 .ms-reclaimed  { background: rgba(30,58,95,0.3); color: #90B4D8; border: 1px solid rgba(42,80,128,0.4); }
 .ms-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
 
+/* ── TIMELINE ────────────────────────────────────────────────────── */
+.timeline-list { list-style: none; padding: 0; margin: 0; }
+.timeline-item {
+  display: flex;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  align-items: flex-start;
+}
+.timeline-item:last-child { border-bottom: none; }
+.timeline-year {
+  font-family: var(--fm);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  white-space: nowrap;
+  min-width: 38px;
+  padding-top: 2px;
+  flex-shrink: 0;
+}
+.timeline-event {
+  font-size: 14px;
+  color: var(--text);
+  line-height: 1.65;
+}
+
 /* ── IN MUSIC ────────────────────────────────────────────────────── */
 .music-card {
   display: flex;
@@ -482,6 +508,22 @@ body {
   color: var(--accent);
   font-size: 16px;
   flex-shrink: 0;
+}
+
+/* ── FIRST APPEARED ─────────────────────────────────────────────── */
+.first-appeared {
+  font-family: var(--fm);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.first-appeared-label {
+  color: var(--accent);
+  font-weight: 500;
+  margin-right: 6px;
 }
 
 /* ── SOURCE ITEMS ────────────────────────────────────────────────── */
@@ -1012,11 +1054,16 @@ LABEL: [one of the four labels above]
 CONFIDENCE: [High, Medium, or Low]
 RATIONALE: [2-3 sentences. Specific evidence, named communities, no vague hedging]
 DESCRIPTION: [What the term means and how people use it. Specific, not generic]
-ORIGIN: [Real origin story — artist, song, region, subculture, moment, year. Do not generalize]
+FIRST_APPEARED: [Where and when only — era and cultural context, e.g. "Early 2010s — Atlanta hip-hop and trap culture" or "1980s — New York City, Black queer ballroom scene". Write "unknown" if genuinely unclear]
+ORIGIN: [The origin story — how it emerged, who used it, how it spread. Do not repeat the First Appeared line. 2-3 sentences.]
 MAINSTREAM_STATUS: [one of the three statuses above]
 GENIUS_QUERY: [Most culturally significant song — format: SONG TITLE ARTIST NAME. Example: Formation Beyonce. Write null if unsure]
 COMMON_VARIATIONS: [AAVE-specific orthographic or phonological variants of this exact term only — different spellings of the SAME AAVE word, e.g. lewk for lewks, bussin for bussing. Do NOT include the standard English word this term derives from. Write "none" if no AAVE-specific variants exist]
 SUBCULTURE_TAGS: [comma-separated specific subcultures, max 5, or "none"]
+TIMELINE:
+[YEAR]: [Specific cultural milestone for this term — real, dateable event]
+[YEAR]: [Another milestone]
+[Add 3-8 total. Skip entirely if you cannot name at least 3 specific dated cultural moments. Each entry must be on its own line starting with a 4-digit year followed by a colon.]
 SPIDER_MUSIC: [0-10]
 SPIDER_SOCIAL: [0-10]
 SPIDER_REGIONAL: [0-10]
@@ -1093,6 +1140,14 @@ Use the exact format specified. No JSON. No markdown. No extra text.`;
     function flush() {
       if (mode === 'CULTURAL_EXAMPLES') {
         r.cultural_examples = buffer.filter(l => l.trim().startsWith('-')).map(l => l.replace(/^\s*-\s*/, '').trim());
+      } else if (mode === 'TIMELINE') {
+        r.timeline = buffer
+          .filter(l => /^\d{4}/.test(l.trim()))
+          .map(l => {
+            const m = l.trim().match(/^(\d{4})[:\s-]+(.+)$/);
+            return m ? { year: parseInt(m[1]), event: m[2].trim() } : null;
+          })
+          .filter(Boolean);
       }
       buffer = [];
       mode = null;
@@ -1103,6 +1158,7 @@ Use the exact format specified. No JSON. No markdown. No extra text.`;
       if (!trimmed) continue;
 
       if (trimmed === 'CULTURAL_EXAMPLES:') { flush(); mode = 'CULTURAL_EXAMPLES'; continue; }
+      if (trimmed === 'TIMELINE:') { flush(); mode = 'TIMELINE'; continue; }
 
       if (mode) { buffer.push(trimmed); continue; }
 
@@ -1115,7 +1171,8 @@ Use the exact format specified. No JSON. No markdown. No extra text.`;
       else if (key === 'CONFIDENCE')   r.confidence = val;
       else if (key === 'RATIONALE')    r.rationale = val;
       else if (key === 'DESCRIPTION')  r.description = val;
-      else if (key === 'ORIGIN')       r.origin_context = val;
+      else if (key === 'FIRST_APPEARED') r.first_appeared = val;
+      else if (key === 'ORIGIN')          r.origin_context = val;
       else if (key === 'MAINSTREAM_STATUS') r.mainstream_status = val;
       else if (key === 'GENIUS_QUERY') r.genius_query = val === 'null' ? null : val;
       else if (key === 'COMMON_VARIATIONS') r.common_variations = val === 'none' ? [] : val.split(',').map(s => s.trim()).filter(Boolean);
@@ -1293,6 +1350,10 @@ async function renderCard(term, result) {
       </div>
       <div class="result-section">
         <div class="section-label">Origin</div>
+        ${result.first_appeared && result.first_appeared !== 'unknown' ? `
+        <div class="first-appeared">
+          <span class="first-appeared-label">First Appeared</span>${esc(result.first_appeared)}
+        </div>` : ''}
         <p class="result-text">${esc(result.origin_context)}</p>
       </div>
       <div class="result-section">
@@ -1320,6 +1381,15 @@ async function renderCard(term, result) {
       ${result._wiki ? `<div class="result-section"><div class="section-label">Wikipedia</div><p class="result-text" style="font-size:14px">${esc(result._wiki.summary)}${result._wiki.summary.length >= 200 ? '…' : ''}</p>${result._wiki.url ? `<a href="${result._wiki.url}" target="_blank" class="source-link" style="display:inline-block;margin-top:8px">Read on Wikipedia →</a>` : ''}</div>` : ''}
       ${corpusHtml}
       ${papersHtml}
+
+      ${Array.isArray(result.timeline) && result.timeline.length >= 3 ? `
+      <div class="result-section">
+        <div class="section-label">Timeline</div>
+        <ul class="timeline-list">
+          ${result.timeline.sort((a,b) => a.year - b.year).map(m => `<li class="timeline-item"><span class="timeline-year">${m.year}</span><span class="timeline-event">${esc(m.event)}</span></li>`).join("")}
+        </ul>
+      </div>` : ""}
+
     </div>`;
 }
 
