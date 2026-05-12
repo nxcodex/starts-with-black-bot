@@ -1447,41 +1447,54 @@ async function renderCard(term, result) {
 
 // ── BUILD TRENDS CURVE ────────────────────────────────────────────
 function buildTrendsCurve(trends) {
+  console.log('buildTrendsCurve called:', trends?.status, 'points:', trends?.points?.length);
   if (!trends || trends.status !== 'ok' || !trends.points?.length) {
-    if (trends?.status === 'unavailable') {
-      return `<p style="font-family:var(--fm);font-size:10px;color:var(--dim);letter-spacing:0.08em;margin-bottom:14px">Wikipedia interest data unavailable for this term</p>`;
-    }
-    return '';
+    return trends?.status === 'unavailable'
+      ? '<p style="font-family:var(--fm);font-size:10px;color:var(--dim);letter-spacing:0.08em;margin-bottom:14px">Wikipedia interest data unavailable for this term</p>'
+      : '';
   }
-  const pts  = trends.points;
-  const max  = Math.max(...pts.map(p => p.value), 1);
-  const w = 560, h = 72, pad = 4;
-  const x = i  => pad + (i / (pts.length - 1)) * (w - pad * 2);
-  const y = v  => h - pad - ((v / max) * (h - pad * 2));
-  const pathD = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(p.value).toFixed(1)}`).join(' ');
-  const areaD = `${pathD} L${x(pts.length-1).toFixed(1)},${h} L${x(0).toFixed(1)},${h} Z`;
-  // Year labels at start and end
+  // Normalize to 0-100 index relative to peak
+  const raw  = trends.points.map(p => ({ date: p.date, value: p.value || 0 }));
+  const peak = Math.max(...raw.map(p => p.value), 1);
+  const pts  = raw.map(p => ({ date: p.date, value: Math.round((p.value / peak) * 100) }));
+
+  const W = 500, H = 70, padL = 28, padR = 8, padT = 6, padB = 4;
+  const iW = W - padL - padR;
+  const iH = H - padT - padB;
+  const xp = i => padL + (i / (pts.length - 1)) * iW;
+  const yp = v => padT + iH - (v / 100) * iH;
+
+  const linePts = pts.map((p, i) => xp(i).toFixed(1) + ',' + yp(p.value).toFixed(1));
+  const pathD   = 'M' + linePts.join(' L');
+  const areaD   = pathD + ' L' + xp(pts.length-1).toFixed(1) + ',' + (padT+iH).toFixed(1) + ' L' + xp(0).toFixed(1) + ',' + (padT+iH).toFixed(1) + ' Z';
+
   const labelStart = pts[0]?.date || '';
   const labelEnd   = pts[pts.length-1]?.date || '';
-  const articleNote = trends.article ? ` · "${esc(trends.article)}"` : '';
-  return `
-    <div style="margin-bottom:4px">
-      <svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" preserveAspectRatio="none" style="display:block">
-        <defs>
-          <linearGradient id="pvg" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="#C8922A" stop-opacity="0.25"/>
-            <stop offset="100%" stop-color="#C8922A" stop-opacity="0"/>
-          </linearGradient>
-        </defs>
-        <path d="${areaD}" fill="url(#pvg)"/>
-        <path d="${pathD}" fill="none" stroke="#C8922A" stroke-width="1.5"/>
-      </svg>
-      <div style="display:flex;justify-content:space-between;font-family:var(--fm);font-size:9px;color:var(--dim);letter-spacing:0.08em;margin-top:4px;margin-bottom:14px">
-        <span>${labelStart}</span>
-        <span>WIKIPEDIA PAGEVIEWS${articleNote}</span>
-        <span>${labelEnd}</span>
-      </div>
-    </div>`;
+  const articleNote = trends.article ? ' · ' + trends.article : '';
+
+  // Y-axis labels
+  const yAxis = [0,25,50,75,100].map(v =>
+    '<text x="' + (padL-4).toFixed(0) + '" y="' + yp(v).toFixed(1) + '" text-anchor="end" font-family="var(--fm,monospace)" font-size="7" fill="#3A3A3A" dominant-baseline="middle">' + v + '</text>'
+  ).join('');
+
+  const gradId = 'pvg_' + Math.random().toString(36).slice(2,6);
+
+  return '<div style="margin-bottom:4px">'
+    + '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" height="' + H + '" style="display:block;overflow:visible">'
+    + '<defs><linearGradient id="' + gradId + '" x1="0" y1="0" x2="0" y2="1">'
+    + '<stop offset="0%" stop-color="#C8922A" stop-opacity="0.25"/>'
+    + '<stop offset="100%" stop-color="#C8922A" stop-opacity="0"/>'
+    + '</linearGradient></defs>'
+    + yAxis
+    + '<line x1="' + padL + '" y1="' + padT + '" x2="' + padL + '" y2="' + (padT+iH) + '" stroke="#2A2A2A" stroke-width="1"/>'
+    + '<path d="' + areaD + '" fill="url(#' + gradId + ')"/>'
+    + '<path d="' + pathD + '" fill="none" stroke="#C8922A" stroke-width="1.5"/>'
+    + '</svg>'
+    + '<div style="display:flex;justify-content:space-between;font-family:var(--fm);font-size:9px;color:var(--dim);letter-spacing:0.08em;margin-top:4px;margin-bottom:14px">'
+    + '<span>' + labelStart + '</span>'
+    + '<span>INTEREST INDEX' + articleNote + '</span>'
+    + '<span>' + labelEnd + '</span>'
+    + '</div></div>';
 }
 
 // ── RUN ANALYSIS ──────────────────────────────────────────────────
