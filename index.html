@@ -1474,7 +1474,7 @@ function buildTrendsCurve(trends) {
 
   // Y-axis labels
   const yAxis = [0,25,50,75,100].map(v =>
-    '<text x="' + (padL-4).toFixed(0) + '" y="' + yp(v).toFixed(1) + '" text-anchor="end" font-family="var(--fm,monospace)" font-size="7" fill="#3A3A3A" dominant-baseline="middle">' + v + '</text>'
+    '<text x="' + (padL-4).toFixed(0) + '" y="' + ypA(v).toFixed(1) + '" text-anchor="end" font-family="var(--fm,monospace)" font-size="7" fill="#3A3A3A" dominant-baseline="middle">' + v + '</text>'
   ).join('');
 
   const gradId = 'pvg_' + Math.random().toString(36).slice(2,6);
@@ -1500,17 +1500,17 @@ function buildTrendsCurve(trends) {
   }).join('');
 
   const totalH = H + annHeight;
-  return '<div style="margin-bottom:4px">'
+  return '<div style="margin-bottom:4px;overflow:visible">'
     + '<svg viewBox="0 0 ' + W + ' ' + totalH + '" width="100%" height="' + totalH + '" style="display:block;overflow:visible">'
     + '<defs><linearGradient id="' + gradId + '" x1="0" y1="0" x2="0" y2="1">'
     + '<stop offset="0%" stop-color="#C8922A" stop-opacity="0.25"/>'
     + '<stop offset="100%" stop-color="#C8922A" stop-opacity="0"/>'
     + '</linearGradient></defs>'
     + yAxis
-    + '<line x1="' + padL + '" y1="' + padT + '" x2="' + padL + '" y2="' + (padT+iH) + '" stroke="#2A2A2A" stroke-width="1"/>'
-    + '<path d="' + areaD + '" fill="url(#' + gradId + ')"/>'
-    + '<path d="' + pathD + '" fill="none" stroke="#C8922A" stroke-width="1.5"/>'
-    + peakDots
+    + '<line x1="' + padL + '" y1="' + (annBand+padT) + '" x2="' + padL + '" y2="' + (annBand+padT+H-padT-padB) + '" stroke="#2A2A2A" stroke-width="1"/>'
+    + '<path d="' + areaDA + '" fill="url(#' + gradId + ')"/>'
+    + '<path d="' + pathDA + '" fill="none" stroke="#C8922A" stroke-width="1.5"/>'
+    + peakDotsA
     + svgAnnotations
     + '</svg>'
     + '<div style="display:flex;justify-content:space-between;font-family:var(--fm);font-size:9px;color:var(--dim);letter-spacing:0.08em;margin-top:4px;margin-bottom:14px">'
