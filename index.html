@@ -939,6 +939,38 @@ async function searchScholar(term) {
   } catch { return []; }
 }
 
+// ── WIKIPEDIA PAGEVIEWS ──────────────────────────────────────────
+async function fetchTrends(term) {
+  try {
+    const searchUrl = 'https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=' + encodeURIComponent(term + ' slang') + '&srnamespace=0&srlimit=3&format=json&origin=*';
+    const c1 = new AbortController();
+    const t1 = setTimeout(() => c1.abort(), 5000);
+    const sr = await fetch(searchUrl, { signal: c1.signal });
+    clearTimeout(t1);
+    if (!sr.ok) return { points: [], status: 'unavailable' };
+    const sd = await sr.json();
+    const articles = sd.query?.search || [];
+    if (!articles.length) return { points: [], status: 'unavailable' };
+    const article = articles.find(a => a.title.toLowerCase().includes(term.toLowerCase())) || articles[0];
+    const title = encodeURIComponent(article.title.replace(/ /g, '_'));
+    const now = new Date();
+    const past = new Date(now.getFullYear() - 5, now.getMonth(), 1);
+    const fmt = d => d.toISOString().slice(0,7).replace('-','') + '01';
+    const pvUrl = 'https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article/en.wikipedia/all-access/all-agents/' + title + '/monthly/' + fmt(past) + '/' + fmt(now);
+    const c2 = new AbortController();
+    const t2 = setTimeout(() => c2.abort(), 5000);
+    const pv = await fetch(pvUrl, { signal: c2.signal });
+    clearTimeout(t2);
+    if (!pv.ok) return { points: [], status: 'unavailable' };
+    const pd = await pv.json();
+    const points = (pd.items || []).map(item => ({
+      date:  item.timestamp.slice(0,4) + '/' + item.timestamp.slice(4,6),
+      value: item.views,
+    }));
+    return { points, status: 'ok', article: article.title };
+  } catch { return { points: [], status: 'unavailable' }; }
+}
+
 // ── GENIUS ────────────────────────────────────────────────────────
 async function searchGenius(query) {
   if (!query) return [];
@@ -1016,6 +1048,7 @@ async function analyzeTerm(term) {
 
   // All verification runs in parallel with Claude — nothing blocks analysis
   const wikiPromise    = checkWikipedia(term);
+  const trendsPromise  = fetchTrends(root);
   const geniusQuery    = null; // populated after Claude responds — see below
 
   const sys = `You are a cultural linguist and expert in African American Vernacular English, Black cultural history, and hip-hop. Your job is to determine whether a term originates in Black culture. Be specific and direct. Name real eras and cultural contexts. Do not hedge when the evidence is clear.
@@ -1209,6 +1242,7 @@ Use the exact format specified. No JSON. No markdown. No extra text.`;
 
 
   result._wiki   = await wikiPromise;
+  result._trends = await trendsPromise;
   result._genius = result.genius_query ? await searchGenius(result.genius_query) : [];
 
   // Extract papers — no pull quote extraction, show abstract excerpt honestly
@@ -1231,6 +1265,7 @@ Use the exact format specified. No JSON. No markdown. No extra text.`;
   };
   const cultural = {
     _wiki: result._wiki, _genius: result._genius,
+    _trends: result._trends,
     _papers: result._papers, _fetched_at: Date.now(),
   };
   cacheSet(root, linguistic);                           // permanent
@@ -1389,13 +1424,16 @@ async function renderCard(term, result) {
           <div class="section-label" style="margin-bottom:6px">Common Variations</div>
           <p style="font-family:var(--fm);font-size:13px;color:var(--text)">${result.common_variations.map(v => esc(v)).join(' · ')}</p>
         </div>` : ''}
-        ${spiderHtml}
+        ${spiderHtml ? `
+        <div class="section-label" style="margin-top:20px;margin-bottom:10px">Cultural Spread</div>
+        ${spiderHtml}` : ''}
       </div>` : ''}
       ${musicHtml}
       ${result._wiki ? `<div class="result-section"><div class="section-label">Wikipedia</div><p class="result-text" style="font-size:14px">${esc(result._wiki.summary)}${result._wiki.summary.length >= 200 ? '…' : ''}</p>${result._wiki.url ? `<a href="${result._wiki.url}" target="_blank" class="source-link" style="display:inline-block;margin-top:8px">Read on Wikipedia →</a>` : ''}</div>` : ''}
       ${Array.isArray(result.timeline) && result.timeline.length >= 3 ? `
       <div class="result-section">
         <div class="section-label">Timeline</div>
+        ${buildTrendsCurve(result._trends)}
         <ul class="timeline-list">
           ${result.timeline.sort((a,b) => a.year - b.year).map(m => `<li class="timeline-item"><span class="timeline-year">${m.year}</span><span class="timeline-event">${esc(m.event)}</span></li>`).join("")}
         </ul>
@@ -1403,6 +1441,45 @@ async function renderCard(term, result) {
       ${corpusHtml}
       ${papersHtml}
 
+    </div>`;
+}
+
+// ── BUILD TRENDS CURVE ────────────────────────────────────────────
+function buildTrendsCurve(trends) {
+  if (!trends || trends.status !== 'ok' || !trends.points?.length) {
+    if (trends?.status === 'unavailable') {
+      return `<p style="font-family:var(--fm);font-size:10px;color:var(--dim);letter-spacing:0.08em;margin-bottom:14px">Wikipedia interest data unavailable for this term</p>`;
+    }
+    return '';
+  }
+  const pts  = trends.points;
+  const max  = Math.max(...pts.map(p => p.value), 1);
+  const w = 560, h = 72, pad = 4;
+  const x = i  => pad + (i / (pts.length - 1)) * (w - pad * 2);
+  const y = v  => h - pad - ((v / max) * (h - pad * 2));
+  const pathD = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(p.value).toFixed(1)}`).join(' ');
+  const areaD = `${pathD} L${x(pts.length-1).toFixed(1)},${h} L${x(0).toFixed(1)},${h} Z`;
+  // Year labels at start and end
+  const labelStart = pts[0]?.date || '';
+  const labelEnd   = pts[pts.length-1]?.date || '';
+  const articleNote = trends.article ? ` · "${esc(trends.article)}"` : '';
+  return `
+    <div style="margin-bottom:4px">
+      <svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" preserveAspectRatio="none" style="display:block">
+        <defs>
+          <linearGradient id="pvg" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#C8922A" stop-opacity="0.25"/>
+            <stop offset="100%" stop-color="#C8922A" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <path d="${areaD}" fill="url(#pvg)"/>
+        <path d="${pathD}" fill="none" stroke="#C8922A" stroke-width="1.5"/>
+      </svg>
+      <div style="display:flex;justify-content:space-between;font-family:var(--fm);font-size:9px;color:var(--dim);letter-spacing:0.08em;margin-top:4px;margin-bottom:14px">
+        <span>${labelStart}</span>
+        <span>WIKIPEDIA PAGEVIEWS${articleNote}</span>
+        <span>${labelEnd}</span>
+      </div>
     </div>`;
 }
 
