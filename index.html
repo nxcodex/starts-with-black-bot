@@ -1206,6 +1206,9 @@ Use the exact format specified. No JSON. No markdown. No extra text.`;
 
   const result = parseStructured(raw);
   if (!result.label) throw new Error('Could not parse response — missing label field');
+  // DEBUG — remove after confirming spider works
+  console.log('SPIDER DATA:', JSON.stringify(result.spider));
+  console.log('RAW SNIPPET (spider area):', raw.slice(raw.indexOf('SPIDER'), raw.indexOf('SPIDER') + 200));
 
   result._wiki   = await wikiPromise;
   result._genius = result.genius_query ? await searchGenius(result.genius_query) : [];
