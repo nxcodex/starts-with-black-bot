@@ -1479,28 +1479,29 @@ function buildTrendsCurve(trends) {
 
   const gradId = 'pvg_' + Math.random().toString(36).slice(2,6);
 
-  // Peak dots and annotation lines
+  // Peak dots
   const peakDots = pts.map((p, i) => {
-    if (!p.isPeak && !p.annotation) return '';
-    const cx = xp(i).toFixed(1), cy = yp(p.value).toFixed(1);
-    return '<circle cx="' + cx + '" cy="' + cy + '" r="3" fill="#C8922A"/>';
+    if (!p.isPeak) return '';
+    return '<circle cx="' + xp(i).toFixed(1) + '" cy="' + yp(p.value).toFixed(1) + '" r="3" fill="#C8922A"/>';
   }).join('');
 
-  // Annotation tooltips — small labels above top peaks
-  const annotations = pts.map((p, i) => {
+  // Annotations — one line max 45 chars, well above the dot
+  const annHeight = 36; // px above curve top for annotation area
+  const svgAnnotations = pts.map((p, i) => {
     if (!p.annotation) return '';
     const cx = xp(i), cy = yp(p.value);
-    const anchor = i < pts.length * 0.3 ? 'start' : i > pts.length * 0.7 ? 'end' : 'middle';
-    const words = p.annotation.split(' ');
-    const line1 = words.slice(0, Math.ceil(words.length/2)).join(' ');
-    const line2 = words.slice(Math.ceil(words.length/2)).join(' ');
-    return '<line x1="' + cx.toFixed(1) + '" y1="' + (cy-4).toFixed(1) + '" x2="' + cx.toFixed(1) + '" y2="' + (cy-16).toFixed(1) + '" stroke="#C8922A" stroke-width="0.75" stroke-dasharray="2,2"/>'
-      + '<text x="' + cx.toFixed(1) + '" y="' + (cy-19).toFixed(1) + '" text-anchor="' + anchor + '" font-family="var(--fm,monospace)" font-size="7" fill="#8A7A68">' + line1 + '</text>'
-      + (line2 ? '<text x="' + cx.toFixed(1) + '" y="' + (cy-11).toFixed(1) + '" text-anchor="' + anchor + '" font-family="var(--fm,monospace)" font-size="7" fill="#8A7A68">' + line2 + '</text>' : '');
+    const label = p.annotation.length > 45 ? p.annotation.slice(0,44) + '…' : p.annotation;
+    const anchor = i < pts.length * 0.25 ? 'start' : i > pts.length * 0.75 ? 'end' : 'middle';
+    const lineY1 = (cy - 5).toFixed(1);
+    const lineY2 = (padT - 8).toFixed(1);
+    const textY  = (padT - 12).toFixed(1);
+    return '<line x1="' + cx.toFixed(1) + '" y1="' + lineY1 + '" x2="' + cx.toFixed(1) + '" y2="' + lineY2 + '" stroke="#4A4A4A" stroke-width="0.75" stroke-dasharray="2,2"/>'
+      + '<text x="' + cx.toFixed(1) + '" y="' + textY + '" text-anchor="' + anchor + '" font-family="var(--fm,monospace)" font-size="7.5" fill="#8A7A68" letter-spacing="0.04em">' + label + '</text>';
   }).join('');
 
+  const totalH = H + annHeight;
   return '<div style="margin-bottom:4px">'
-    + '<svg viewBox="0 0 ' + W + ' ' + (H+30) + '" width="100%" height="' + (H+30) + '" style="display:block;overflow:visible">'
+    + '<svg viewBox="0 0 ' + W + ' ' + totalH + '" width="100%" height="' + totalH + '" style="display:block;overflow:visible">'
     + '<defs><linearGradient id="' + gradId + '" x1="0" y1="0" x2="0" y2="1">'
     + '<stop offset="0%" stop-color="#C8922A" stop-opacity="0.25"/>'
     + '<stop offset="100%" stop-color="#C8922A" stop-opacity="0"/>'
@@ -1511,6 +1512,7 @@ function buildTrendsCurve(trends) {
     + '<path d="' + pathD + '" fill="none" stroke="#C8922A" stroke-width="1.5"/>'
     + peakDots
     + annotations
+    + svgAnnotations
     + '</svg>'
     + '<div style="display:flex;justify-content:space-between;font-family:var(--fm);font-size:9px;color:var(--dim);letter-spacing:0.08em;margin-top:4px;margin-bottom:14px">'
     + '<span style="color:#444">' + labelStart + '</span>'
@@ -1521,48 +1523,54 @@ function buildTrendsCurve(trends) {
 
 // ── ANNOTATE TREND SPIKES ─────────────────────────────────────────
 async function annotateTrendSpikes(trends, term) {
-  if (!trends || trends.status !== 'ok' || trends.points.length < 3) return trends;
+  if (!trends || trends.status !== "ok" || trends.points.length < 3) return trends;
   try {
-    // Find top 3 peak months by value
-    const sorted = [...trends.points]
-      .map((p, i) => ({ ...p, i }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 3);
+    const dateToMonths = d => { const p = d.split("/"); return parseInt(p[0])*12 + parseInt(p[1]); };
+    const monthDiff = (a, b) => Math.abs(dateToMonths(a) - dateToMonths(b));
 
-    const peakDates = sorted.map(p => p.date).join(', ');
+    // Normalize to 0-100 for threshold comparison
+    const peakVal = Math.max(...trends.points.map(p => p.value), 1);
+    const normed  = trends.points.map(p => ({ ...p, score: Math.round((p.value / peakVal) * 100) }));
+
+    // 1. Absolute peak — always annotated
+    const absPeak = [...normed].sort((a,b) => b.score - a.score)[0];
+    const selected = [absPeak];
+
+    // 2. Additional peaks: score >= 75, at least 12 months from any selected
+    const candidates = normed
+      .filter(p => p.score >= 75 && p.date !== absPeak.date)
+      .sort((a,b) => b.score - a.score);
+    for (const c of candidates) {
+      if (selected.every(s => monthDiff(c.date, s.date) >= 12)) {
+        selected.push(c);
+        if (selected.length === 3) break;
+      }
+    }
+
+    const peakDates = selected.map(p => p.date).join(", ");
+    const dateList  = selected.map(p => '{"date":"' + p.date + '","event":"moment or null"}').join(",\n  ");
     const raw = await callClaude(
-      'You identify cultural moments. Return ONLY valid JSON, no markdown.',
-      `The Wikipedia pageviews for "${term}" peaked in these months: ${peakDates}.
-
-For each month, name the single most likely cultural moment, news event, or mainstream development that drove the spike in interest — a specific event, not a vague description. If you genuinely cannot identify a specific moment for a date, return null for that entry.
-
-Return exactly this JSON array (one entry per peak date in the same order):
-[
-  {"date": "${sorted[0]?.date}", "event": "specific moment or null"},
-  {"date": "${sorted[1]?.date}", "event": "specific moment or null"},
-  {"date": "${sorted[2]?.date}", "event": "specific moment or null"}
-]`
+      "You identify cultural moments. Return ONLY a valid JSON array, no markdown.",
+      "Wikipedia pageviews for \"" + term + "\" spiked in: " + peakDates + ". For each date name the single most likely specific cultural event that drove the spike. Max 8 words. If unknown return null.\n\nReturn: [\n  " + dateList + "\n]"
     );
-    const clean = raw.replace(/\`\`\`json|\`\`\`/g, '').trim();
+    const clean = raw.replace(/```json|```/g, "").trim();
     const annotations = JSON.parse(clean);
-    // Build lookup: date → event
     const lookup = {};
     for (const a of annotations) {
-      if (a.event && a.event !== 'null') lookup[a.date] = a.event;
+      if (a.event && a.event !== "null" && a.event !== null) lookup[a.date] = a.event;
     }
-    // Mark peaks in points
-    const peak = Math.max(...trends.points.map(p => p.value));
-    const threshold = peak * 0.6; // top 60% of peak qualifies as notable
+    const selectedDates = new Set(selected.map(p => p.date));
     const annotated = trends.points.map(p => ({
       ...p,
       annotation: lookup[p.date] || null,
-      isPeak: p.value >= threshold,
+      isPeak: selectedDates.has(p.date),
     }));
     return { ...trends, points: annotated };
   } catch(e) {
     return trends;
   }
 }
+
 
 // ── RUN ANALYSIS ──────────────────────────────────────────────────
 async function runAnalysis(terms) {
