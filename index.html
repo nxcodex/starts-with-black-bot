@@ -1454,9 +1454,9 @@ function buildTrendsCurve(trends) {
       : '';
   }
   // Normalize to 0-100 index relative to peak
-  const raw  = trends.points.map(p => ({ date: p.date, value: p.value || 0 }));
+  const raw  = trends.points.map(p => ({ date: p.date, value: p.value || 0, isPeak: p.isPeak || false, annotation: p.annotation || null }));
   const peak = Math.max(...raw.map(p => p.value), 1);
-  const pts  = raw.map(p => ({ date: p.date, value: Math.round((p.value / peak) * 100) }));
+  const pts  = raw.map(p => ({ date: p.date, value: Math.round((p.value / peak) * 100), isPeak: p.isPeak, annotation: p.annotation }));
 
   const W = 500, H = 70, padL = 28, padR = 8, padT = 6, padB = 4;
   const iW = W - padL - padR;
@@ -1521,7 +1521,6 @@ function buildTrendsCurve(trends) {
 
 // ── ANNOTATE TREND SPIKES ─────────────────────────────────────────
 async function annotateTrendSpikes(trends, term) {
-  console.log('annotateTrendSpikes called for:', term, 'points:', trends?.points?.length);
   if (!trends || trends.status !== 'ok' || trends.points.length < 3) return trends;
   try {
     // Find top 3 peak months by value
@@ -1547,12 +1546,10 @@ Return exactly this JSON array (one entry per peak date in the same order):
     const clean = raw.replace(/\`\`\`json|\`\`\`/g, '').trim();
     const annotations = JSON.parse(clean);
     // Build lookup: date → event
-    console.log('Raw annotations from Claude:', JSON.stringify(annotations));
     const lookup = {};
     for (const a of annotations) {
       if (a.event && a.event !== 'null') lookup[a.date] = a.event;
     }
-    console.log('Lookup built:', JSON.stringify(lookup));
     // Mark peaks in points
     const peak = Math.max(...trends.points.map(p => p.value));
     const threshold = peak * 0.6; // top 60% of peak qualifies as notable
@@ -1563,7 +1560,6 @@ Return exactly this JSON array (one entry per peak date in the same order):
     }));
     return { ...trends, points: annotated };
   } catch(e) {
-    console.log('annotateTrendSpikes error:', e.message);
     return trends;
   }
 }
