@@ -1243,6 +1243,7 @@ Use the exact format specified. No JSON. No markdown. No extra text.`;
 
   result._wiki   = await wikiPromise;
   result._trends = await trendsPromise;
+  console.log('TRENDS:', JSON.stringify(result._trends)?.slice(0, 200));
   result._genius = result.genius_query ? await searchGenius(result.genius_query) : [];
 
   // Extract papers — no pull quote extraction, show abstract excerpt honestly
