@@ -1521,6 +1521,7 @@ function buildTrendsCurve(trends) {
 
 // ── ANNOTATE TREND SPIKES ─────────────────────────────────────────
 async function annotateTrendSpikes(trends, term) {
+  console.log('annotateTrendSpikes called for:', term, 'points:', trends?.points?.length);
   if (!trends || trends.status !== 'ok' || trends.points.length < 3) return trends;
   try {
     // Find top 3 peak months by value
@@ -1546,10 +1547,12 @@ Return exactly this JSON array (one entry per peak date in the same order):
     const clean = raw.replace(/\`\`\`json|\`\`\`/g, '').trim();
     const annotations = JSON.parse(clean);
     // Build lookup: date → event
+    console.log('Raw annotations from Claude:', JSON.stringify(annotations));
     const lookup = {};
     for (const a of annotations) {
       if (a.event && a.event !== 'null') lookup[a.date] = a.event;
     }
+    console.log('Lookup built:', JSON.stringify(lookup));
     // Mark peaks in points
     const peak = Math.max(...trends.points.map(p => p.value));
     const threshold = peak * 0.6; // top 60% of peak qualifies as notable
@@ -1559,8 +1562,9 @@ Return exactly this JSON array (one entry per peak date in the same order):
       isPeak: p.value >= threshold,
     }));
     return { ...trends, points: annotated };
-  } catch {
-    return trends; // annotation failure doesn't break the curve
+  } catch(e) {
+    console.log('annotateTrendSpikes error:', e.message);
+    return trends;
   }
 }
 
