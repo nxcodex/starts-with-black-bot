@@ -1184,8 +1184,25 @@ Use the exact format specified. No JSON. No markdown. No extra text.`;
       else if (key === 'CORPUS_EVIDENCE')  r.corpus_evidence = val;
     }
     flush();
+
+    // Post-parse spider extraction — regex scan regardless of field ordering
+    // Handles cases where Claude puts SPIDER_ fields after CULTURAL_EXAMPLES or TIMELINE
+    const spiderMap = {
+      'SPIDER_MUSIC': 'music', 'SPIDER_SOCIAL': 'social_media',
+      'SPIDER_REGIONAL': 'regional', 'SPIDER_COMMUNITY': 'community',
+      'SPIDER_MAINSTREAM': 'mainstream', 'SPIDER_ACADEMIC': 'academic',
+    };
+    for (const [field, key] of Object.entries(spiderMap)) {
+      const m = text.match(new RegExp(field + '[:\\s]+(\\d+)'));
+      if (m) {
+        if (!r.spider) r.spider = {};
+        r.spider[key] = parseInt(m[1]) || 0;
+      }
+    }
+
     return r;
   }
+
 
   const result = parseStructured(raw);
   if (!result.label) throw new Error('Could not parse response — missing label field');
