@@ -1448,6 +1448,7 @@ async function renderCard(term, result) {
 
 // ── BUILD TRENDS CURVE ────────────────────────────────────────────
 function buildTrendsCurve(trends) {
+  console.log('buildTrendsCurve called, status:', trends?.status, 'points:', trends?.points?.length, 'has _trends:', !!trends);
   if (!trends || trends.status !== 'ok' || !trends.points?.length) {
     return trends?.status === 'unavailable'
       ? '<p style="font-family:var(--fm);font-size:10px;color:var(--dim);letter-spacing:0.08em;margin-bottom:14px">Wikipedia interest data unavailable for this term</p>'
