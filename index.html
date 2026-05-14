@@ -1453,65 +1453,51 @@ function buildTrendsCurve(trends) {
       ? '<p style="font-family:var(--fm);font-size:10px;color:var(--dim);letter-spacing:0.08em;margin-bottom:14px">Wikipedia interest data unavailable for this term</p>'
       : '';
   }
-  // Normalize to 0-100 index relative to peak
   const raw  = trends.points.map(p => ({ date: p.date, value: p.value || 0, isPeak: p.isPeak || false, annotation: p.annotation || null }));
   const peak = Math.max(...raw.map(p => p.value), 1);
-  const pts  = raw.map(p => ({ date: p.date, value: Math.round((p.value / peak) * 100), isPeak: p.isPeak, annotation: p.annotation }));
+  const pts  = raw.map(p => ({ ...p, value: Math.round((p.value / peak) * 100) }));
 
-  const W = 500, H = 70, padL = 28, padR = 8, padT = 6, padB = 4;
-  const iW = W - padL - padR;
-  const iH = H - padT - padB;
-  const xp = i => padL + (i / (pts.length - 1)) * iW;
-  const yp = v => padT + iH - (v / 100) * iH;
+  const W = 500, padL = 30, padR = 8, padB = 4;
+  const annBand = 40, curveH = 70, totalH = annBand + curveH;
+  const curveTop = annBand, curveBot = annBand + curveH - padB;
+  const xp = i => padL + (i / Math.max(pts.length - 1, 1)) * (W - padL - padR);
+  const yp = v => curveTop + (curveH - padB) - (v / 100) * (curveH - padB);
 
   const linePts = pts.map((p, i) => xp(i).toFixed(1) + ',' + yp(p.value).toFixed(1));
   const pathD   = 'M' + linePts.join(' L');
-  const areaD   = pathD + ' L' + xp(pts.length-1).toFixed(1) + ',' + (padT+iH).toFixed(1) + ' L' + xp(0).toFixed(1) + ',' + (padT+iH).toFixed(1) + ' Z';
+  const areaD   = pathD + ' L' + xp(pts.length-1).toFixed(1) + ',' + curveBot.toFixed(1) + ' L' + xp(0).toFixed(1) + ',' + curveBot.toFixed(1) + ' Z';
 
-  const labelStart = pts[0]?.date || '';
-  const labelEnd   = pts[pts.length-1]?.date || '';
+  const labelStart  = pts[0]?.date || '';
+  const labelEnd    = pts[pts.length-1]?.date || '';
   const articleNote = trends.article ? ' · ' + trends.article : '';
+  const gradId      = 'pvg_' + Math.random().toString(36).slice(2,6);
 
-  // Y-axis labels
-  const yAxis = [0,25,50,75,100].map(v =>
-    '<text x="' + (padL-4).toFixed(0) + '" y="' + ypA(v).toFixed(1) + '" text-anchor="end" font-family="var(--fm,monospace)" font-size="7" fill="#3A3A3A" dominant-baseline="middle">' + v + '</text>'
+  const yAxis = [0, 50, 100].map(v =>
+    '<text x="' + (padL-4) + '" y="' + yp(v).toFixed(1) + '" text-anchor="end" font-family="var(--fm,monospace)" font-size="7" fill="#3A3A3A" dominant-baseline="middle">' + v + '</text>'
   ).join('');
 
-  const gradId = 'pvg_' + Math.random().toString(36).slice(2,6);
+  const peakDots = pts.map((p, i) =>
+    p.isPeak ? '<circle cx="' + xp(i).toFixed(1) + '" cy="' + yp(p.value).toFixed(1) + '" r="3" fill="#C8922A"/>' : ''
+  ).join('');
 
-  // Peak dots
-  const peakDots = pts.map((p, i) => {
-    if (!p.isPeak) return '';
-    return '<circle cx="' + xp(i).toFixed(1) + '" cy="' + yp(p.value).toFixed(1) + '" r="3" fill="#C8922A"/>';
-  }).join('');
-
-  // Annotations — one line max 45 chars, well above the dot
-  const annHeight = 36; // px above curve top for annotation area
   const svgAnnotations = pts.map((p, i) => {
     if (!p.annotation) return '';
-    const cx = xp(i), cy = yp(p.value);
-    const label = p.annotation.length > 45 ? p.annotation.slice(0,44) + '…' : p.annotation;
-    const anchor = i < pts.length * 0.25 ? 'start' : i > pts.length * 0.75 ? 'end' : 'middle';
-    const lineY1 = (cy - 5).toFixed(1);
-    const lineY2 = (padT - 8).toFixed(1);
-    const textY  = (padT - 12).toFixed(1);
-    return '<line x1="' + cx.toFixed(1) + '" y1="' + lineY1 + '" x2="' + cx.toFixed(1) + '" y2="' + lineY2 + '" stroke="#4A4A4A" stroke-width="0.75" stroke-dasharray="2,2"/>'
-      + '<text x="' + cx.toFixed(1) + '" y="' + textY + '" text-anchor="' + anchor + '" font-family="var(--fm,monospace)" font-size="7.5" fill="#8A7A68" letter-spacing="0.04em">' + label + '</text>';
+    const cx = xp(i), dotY = yp(p.value);
+    const textY = 14;
+    const label = p.annotation.length > 45 ? p.annotation.slice(0,44) + '\u2026' : p.annotation;
+    const anchor = cx < W * 0.25 ? 'start' : cx > W * 0.75 ? 'end' : 'middle';
+    return '<line x1="' + cx.toFixed(1) + '" y1="' + (textY+4) + '" x2="' + cx.toFixed(1) + '" y2="' + (dotY-4).toFixed(1) + '" stroke="#444" stroke-width="0.75" stroke-dasharray="2,2"/>'
+      + '<text x="' + cx.toFixed(1) + '" y="' + textY + '" text-anchor="' + anchor + '" font-family="var(--fm,monospace)" font-size="7.5" fill="#8A7A68" letter-spacing="0.03em">' + label + '</text>';
   }).join('');
 
-  const totalH = H + annHeight;
-  return '<div style="margin-bottom:4px;overflow:visible">'
-    + '<svg viewBox="0 0 ' + W + ' ' + totalH + '" width="100%" height="' + totalH + '" style="display:block;overflow:visible">'
-    + '<defs><linearGradient id="' + gradId + '" x1="0" y1="0" x2="0" y2="1">'
-    + '<stop offset="0%" stop-color="#C8922A" stop-opacity="0.25"/>'
-    + '<stop offset="100%" stop-color="#C8922A" stop-opacity="0"/>'
-    + '</linearGradient></defs>'
+  return '<div style="margin-bottom:4px">'
+    + '<svg viewBox="0 0 ' + W + ' ' + totalH + '" width="100%" height="' + totalH + '" style="display:block">'
+    + '<defs><linearGradient id="' + gradId + '" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#C8922A" stop-opacity="0.25"/><stop offset="100%" stop-color="#C8922A" stop-opacity="0"/></linearGradient></defs>'
     + yAxis
-    + '<line x1="' + padL + '" y1="' + (annBand+padT) + '" x2="' + padL + '" y2="' + (annBand+padT+H-padT-padB) + '" stroke="#2A2A2A" stroke-width="1"/>'
-    + '<path d="' + areaDA + '" fill="url(#' + gradId + ')"/>'
-    + '<path d="' + pathDA + '" fill="none" stroke="#C8922A" stroke-width="1.5"/>'
-    + peakDotsA
-    + svgAnnotations
+    + '<line x1="' + padL + '" y1="' + curveTop + '" x2="' + padL + '" y2="' + curveBot.toFixed(1) + '" stroke="#2A2A2A" stroke-width="1"/>'
+    + '<path d="' + areaD + '" fill="url(#' + gradId + ')"/>'
+    + '<path d="' + pathD + '" fill="none" stroke="#C8922A" stroke-width="1.5"/>'
+    + peakDots + svgAnnotations
     + '</svg>'
     + '<div style="display:flex;justify-content:space-between;font-family:var(--fm);font-size:9px;color:var(--dim);letter-spacing:0.08em;margin-top:4px;margin-bottom:14px">'
     + '<span style="color:#444">' + labelStart + '</span>'
